@@ -110,10 +110,10 @@ async def egress_card(request: Request) -> Response:
     """Overview card, loaded by htmx so a slow egress lookup never delays the page."""
     try:
         info = await request.app.state.worker.egress()
-        ip, proxy = info.ip, info.proxy
+        ip, proxy, country = info.ip, info.proxy, info.country
     except (WorkerUnavailable, TimeoutError):
-        ip, proxy = "worker unavailable", None
-    return render(request, "_egress.html", ip=ip, proxy=proxy)
+        ip, proxy, country = "worker unavailable", None, None
+    return render(request, "_egress.html", ip=ip, proxy=proxy, country=country)
 
 
 @router.get("/cookies", dependencies=AUTH)

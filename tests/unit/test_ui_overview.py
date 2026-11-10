@@ -32,3 +32,10 @@ def test_egress_card(ui_client):
     assert r.status_code == 200
     assert "direct" in r.text
     assert 'hx-get="/ui/egress"' in ui_client.get("/ui").text
+
+    # with country
+    ui_client.app.state.worker.egress_country = "RO"
+    r = ui_client.get("/ui/egress")
+    assert r.status_code == 200
+    assert "RO" in r.text
+    assert "🇷🇴" in r.text

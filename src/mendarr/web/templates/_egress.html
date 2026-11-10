@@ -1,4 +1,4 @@
 {% import "_macros.html" as m with context %}
 <div class="stat-top"><span class="stat-label">Egress</span><span class="stat-icon">{{ m.icon("wifi") }}</span></div>
-<div class="stat-value sm">{{ ip }}</div>
+<div class="stat-value sm">{{ ip }}{% if country %} <span style="display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--surface-3); color: var(--fg-2); vertical-align: middle; margin-left: 6px;" title="{{ country }}">{{ country | flag }} {{ country }}</span>{% endif %}</div>
 <div class="stat-sub">{% if proxy %}via {{ proxy }}{% else %}direct{% endif %}</div>

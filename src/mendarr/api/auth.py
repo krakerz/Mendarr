@@ -138,7 +138,18 @@ async def require_user(conn: HTTPConnection) -> str:
     sess = auth.session(conn.cookies.get(COOKIE))
     if conn.scope["type"] == "websocket":
         origin = conn.headers.get("origin")
-        if sess is None or (origin and urlsplit(origin).netloc != conn.headers.get("host")):
+        host = conn.headers.get("x-forwarded-host") or conn.headers.get("host") or ""
+        origin_host = urlsplit(origin).netloc if origin else ""
+
+        def _norm_host(h: str) -> str:
+            h = h.lower()
+            if h.endswith(":80"):
+                return h[:-3]
+            if h.endswith(":443"):
+                return h[:-4]
+            return h
+
+        if sess is None or (origin_host and _norm_host(origin_host) != _norm_host(host)):
             raise WebSocketException(code=status.WS_1008_POLICY_VIOLATION, reason="login required")
         conn.state.user = sess[0]
         return sess[0]

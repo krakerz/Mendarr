@@ -5,6 +5,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.1] — 2026-11-10
+
+### Fixed
+- Fixed extreme 2–3 minute delay when connecting to VNC on remote servers by disabling client reverse DNS lookups in `x11vnc` (`-nolookup -noipv6`).
+- Fixed blank or frozen display in noVNC on headless `Xvfb` by disabling unsupported damage extensions (`-noxdamage -noxfixes -noxrecord`).
+- Fixed reverse proxy WebSocket upgrades and origin validation when running behind an external proxy (`X-Forwarded-Host`).
+- Fixed GitHub Actions build failures on `main` caused by un-lowercased repository name in GHCR tags.
+- Scoped Docker Buildx cache by component (`api`, `browser`) in GitHub Actions so image builds do not invalidate each other's cache.
+
+### Added
+- Added IP country flag and ISO code display to the dashboard Egress card.
+- Added live noVNC connection status diagnostics in Manual Solve.
+
 ## [0.5.0] — 2026-11-10
 
 ### Added

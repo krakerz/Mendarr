@@ -57,7 +57,12 @@ def create_app(
     if upstream is not None:
         log.info("upstream proxy: all worker traffic goes through %s", upstream)
     displays = DisplayManager(settings.slots)
-    egress = Egress(settings.egress_check_url, settings.egress_ttl_seconds, upstream=upstream)
+    egress = Egress(
+        settings.egress_check_url,
+        settings.egress_ttl_seconds,
+        upstream=upstream,
+        country_url="https://api.country.is/{ip}",
+    )
     if launcher is not None:
         launchers = dict.fromkeys(BACKENDS, launcher)
     else:

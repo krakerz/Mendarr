@@ -158,6 +158,7 @@ class EgressInfo(BaseModel):
     ip: str  # "default" when no check URL is set, "unknown" when the lookup failed
     checked_at: float = 0
     proxy: str | None = None  # upstream proxy as scheme://host:port; None = direct
+    country: str | None = None  # 2-letter ISO country code (e.g. "RO", "JP"); None = unasserted
 
 
 class WorkerInfo(BaseModel):
