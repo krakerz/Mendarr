@@ -1,6 +1,6 @@
 [project]
 name = "mendarr"
-version = "0.1.0"
+version = "0.5.0"
 description = "Self-healing, FlareSolverr-compatible Cloudflare solver"
 readme = "README.md"
 requires-python = ">=3.12,<3.13"

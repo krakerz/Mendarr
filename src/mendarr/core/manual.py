@@ -170,6 +170,12 @@ class ManualManager:
     def sessions(self) -> list[ManualSession]:
         return sorted(self._sessions.values(), key=lambda s: s.started, reverse=True)
 
+    def clear_finished(self) -> int:
+        to_remove = [sid for sid, s in self._sessions.items() if not s.active]
+        for sid in to_remove:
+            del self._sessions[sid]
+        return len(to_remove)
+
     def active_for_slot(self, slot: int) -> ManualSession | None:
         return next((s for s in self._sessions.values() if s.active and s.slot == slot), None)
 

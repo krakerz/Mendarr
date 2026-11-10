@@ -45,6 +45,12 @@ async def start_adhoc_manual(request: Request, url: str = Form(), backend: str =
     return _go(request, f"/ui/manual/{s.id}")
 
 
+@router.post("/manual/clear")
+async def clear_manual_sessions(request: Request) -> Response:
+    count = _manager(request).clear_finished()
+    return _go(request, f"/ui/manual?ok={quote(f'Cleared {count} finished session(s)')}")
+
+
 @router.get("/manual", response_class=HTMLResponse)
 async def list_manual(request: Request, error: str = "") -> Response:
     return render(request, "manual_list.html", active="manual", sessions=_manager(request).sessions(), error=error)

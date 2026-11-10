@@ -89,7 +89,9 @@ def test_check(ui_client):
 
 def test_notify_test(ui_client):
     assert "No notification channel" in _post(ui_client, "/ui/settings/notify/test", event="healed").text
-    _post(ui_client, "/ui/settings/notify", webhook_url="http://hook.test/x", events=["healed"])
+    _post(ui_client, "/ui/settings/notify", webhook_url="http://hook.test/x", events=["healed"], discord_ping="@here")
+    data = _read(ui_client)
+    assert data["notify"]["discord_ping"] == "@here"
     st = ui_client.app.state
     st.notify_transport = httpx.MockTransport(lambda r: httpx.Response(204))
     res = _post(ui_client, "/ui/settings/notify/test", event="healed").text
@@ -100,3 +102,11 @@ def test_notify_test(ui_client):
 def test_csrf_required(ui_client):
     r = ui_client.post("/ui/settings/raw", data={"text": ""}, follow_redirects=False)
     assert r.status_code == 403
+
+
+def test_credentials_card_renders(ui_client):
+    r = ui_client.get("/ui/settings")
+    assert r.status_code == 200
+    assert "Credentials / Dashboard User" in r.text
+    assert "MENDARR_UI_USER" in r.text
+    assert "MENDARR_UI_PASSWORD" in r.text

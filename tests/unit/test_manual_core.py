@@ -5,7 +5,7 @@ from fakeworker import UA, clearance_cookie, snapshot
 
 from mendarr.api.worker_client import WorkerRejected, WorkerUnavailable
 from mendarr.core.cookies import CookieCache
-from mendarr.core.manual import ManualError, ManualManager
+from mendarr.core.manual import ManualError, ManualManager, ManualSession
 from mendarr.core.traces import TraceStore
 from mendarr.plugins.store import PluginStore
 from mendarr.rpc import ManualResult, ManualStart, ManualStarted, ManualState
@@ -257,3 +257,14 @@ async def test_start_adhoc_invalid_url(parts):
         await m.start_adhoc("not-a-url")
     with pytest.raises(ValueError):
         await m.start_adhoc("ftp://example.org/resource")
+
+
+async def test_clear_finished(parts):
+    m = manager(parts, FakeManualWorker([]))
+    s1 = ManualSession(id="s1", domain="a.org", status="running")
+    s2 = ManualSession(id="s2", domain="b.org", status="solved")
+    s3 = ManualSession(id="s3", domain="c.org", status="failed")
+    m._sessions = {"s1": s1, "s2": s2, "s3": s3}
+    cleared = m.clear_finished()
+    assert cleared == 2
+    assert list(m._sessions.keys()) == ["s1"]

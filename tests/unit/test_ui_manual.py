@@ -47,6 +47,12 @@ class StubManager:
     def sessions(self):
         return list(self.items.values())
 
+    def clear_finished(self):
+        to_remove = [sid for sid, s in self.items.items() if not s.active]
+        for sid in to_remove:
+            del self.items[sid]
+        return len(to_remove)
+
     def active_for_slot(self, slot):
         return next((s for s in self.items.values() if s.active and s.slot == slot), None)
 
@@ -166,3 +172,24 @@ def test_requires_login(client):
 def test_static_assets(ui_client):
     assert ui_client.get("/ui/static/vendor/novnc/core/rfb.js").status_code == 200
     assert ui_client.get("/ui/static/js/manual.js").status_code == 200
+
+
+def test_clear_finished_sessions(ui_client, stub):
+    # m1 is running, m2 is solved
+    r = post(ui_client, "/ui/manual/clear")
+    assert r.status_code == 303
+    assert "/ui/manual?ok=" in r.headers["Location"]
+    assert "m2" not in stub.items
+    assert "m1" in stub.items
+
+
+def test_clear_button_renders_when_finished(ui_client, stub):
+    # m2 is solved -> button is present
+    r = ui_client.get("/ui/manual")
+    assert r.status_code == 200
+    assert "/ui/manual/clear" in r.text
+    # now remove m2 -> no finished sessions, button is not rendered
+    stub.items.pop("m2")
+    r2 = ui_client.get("/ui/manual")
+    assert r2.status_code == 200
+    assert "/ui/manual/clear" not in r2.text

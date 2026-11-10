@@ -1,5 +1,6 @@
 services:
   mendarr-browser:
+    image: ghcr.io/krakerz/mendarr-browser:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile.browser
@@ -22,6 +23,7 @@ services:
     restart: unless-stopped
 
   mendarr:
+    image: ghcr.io/krakerz/mendarr:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile.api

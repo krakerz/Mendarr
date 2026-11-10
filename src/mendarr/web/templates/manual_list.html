@@ -7,6 +7,15 @@
     <h1>Manual solve</h1>
     <p class="page-sub">Interactive browser sessions for human-assisted challenge clearance.</p>
   </div>
+  {% set finished_sessions = sessions|rejectattr('active')|list %}
+  {% if finished_sessions %}
+  <div class="actions">
+    <form method="post" action="/ui/manual/clear">
+      {{ m.csrf_field() }}
+      <button class="btn btn-sm btn-ghost btn-danger">{{ m.icon("trash-2") }} Clear finished</button>
+    </form>
+  </div>
+  {% endif %}
 </header>
 {% if error %}<p class="flash flash-err">{{ m.icon("triangle-alert") }}<span>{{ error }}</span></p>{% endif %}
 

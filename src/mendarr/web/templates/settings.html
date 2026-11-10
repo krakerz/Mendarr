@@ -19,10 +19,25 @@
     <span>Public URL: <strong style="color: var(--fg);">{{ env.public_url or "not set" }}</strong></span>
     <span class="muted">·</span>
     <span>Data dir: <code style="font-size: 0.75rem;">{{ env.data_dir }}</code></span>
+    <span class="muted">·</span>
+    <span>User: <strong style="color: var(--fg);">{{ env.ui_user or user or "not set" }}</strong></span>
   </div>
 </div>
 
 <div class="stack">
+  <section id="credentials" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("shield-check") }} Credentials / Dashboard User</h2>
+    </div>
+    <div style="font-size: 0.875rem;">
+      <p style="margin: 0 0 8px;">
+        Active dashboard user: <strong class="mono" style="color: var(--fg);">{{ env.ui_user or user or "not set" }}</strong>
+      </p>
+      <p class="muted" style="margin: 0; font-size: 0.8125rem; line-height: 1.5;">
+        User and password credentials are configured securely via environment variables <code class="mono">MENDARR_UI_USER</code> and <code class="mono">MENDARR_UI_PASSWORD</code> to prevent credentials from being exposed or rewritten in plain text files.
+      </p>
+    </div>
+  </section>
   <section id="llm" class="card">
     <div class="card-head">
       <h2>{{ m.icon("network") }} LLM endpoints</h2>
@@ -140,6 +155,14 @@
       <div class="checks">
         <label><input type="checkbox" name="clear_discord"> Clear Discord webhook URL</label>
       </div>
+      <label>Discord ping</label>
+      <div>
+        <input name="discord_ping" list="discord-ping-options" value="{{ cfg.notify.discord_ping }}" placeholder="e.g. @here, @everyone, or <@&role_id>" style="max-width: 320px;">
+        <datalist id="discord-ping-options">
+          <option value="@here">
+          <option value="@everyone">
+        </datalist>
+      </div>
       <label>Generic webhook</label><input type="password" name="webhook_url" autocomplete="new-password" placeholder="{{ secrets.webhook }}">
       <span></span>
       <div class="checks">
@@ -175,6 +198,9 @@
     <div class="card-head">
       <h2>{{ m.icon("file-code") }} Raw YAML Configuration</h2>
     </div>
+    <p class="muted" style="margin: 0 0 12px; font-size: 0.8125rem;">
+      Direct configuration file (<code class="mono">mendarr.yml</code>). To keep webhooks and API keys hidden here, reference environment variables like <code class="mono">${DISCORD_WEBHOOK}</code> or <code class="mono">${OPENAI_API_KEY}</code>.
+    </p>
     <form method="post" action="/ui/settings/raw">
       {{ m.csrf_field() }}
       <textarea class="code" name="text" spellcheck="false" aria-label="mendarr.yml" rows="22">{{ text }}</textarea>

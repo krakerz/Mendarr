@@ -165,7 +165,12 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
         "text": file_text if text is None else text,
         "file_error": file_error,
         "cfg": cfg,
-        "env": {"healer_enabled": st.healer_enabled, "public_url": st.public_url, "data_dir": st.data_dir},
+        "env": {
+            "healer_enabled": st.healer_enabled,
+            "public_url": st.public_url,
+            "data_dir": st.data_dir,
+            "ui_user": st.ui_user,
+        },
         "profiles": profiles,
         "order": ", ".join(cfg.llm.order if not llm_raw.get("order") else map(str, llm_raw["order"])),
         "dur": dur,
@@ -315,6 +320,7 @@ async def notify_save(request: Request) -> Response:
         n = _section(raw, "notify")
         _secret_field(n, form, "discord_webhook", "clear_discord")
         _secret_field(n, form, "webhook_url", "clear_webhook")
+        _opt(n, "discord_ping", str(form.get("discord_ping", "")))
         chosen = set(form.getlist("events"))
         n["events"] = {e: e in chosen for e in _EVENTS}
         _opt(n, "timeout_s", str(form.get("timeout_s", "")))

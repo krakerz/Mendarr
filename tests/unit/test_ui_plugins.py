@@ -58,7 +58,7 @@ def test_test_route(ui_client):
     assert r.status_code == 200 and "http(s) URL" in r.text
     r = _post(c, "/ui/plugins/example.org/test", source=src, url="http://example.org/")
     assert r.status_code == 200 and ("passed" in r.text or "failed" in r.text)
-    assert "Nothing was stored" in r.text
+    assert "nothing was stored" in r.text.lower()
     assert c.app.state.store.list("example.org") == []
 
 
