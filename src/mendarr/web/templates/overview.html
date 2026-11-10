@@ -29,7 +29,7 @@
     <div class="stat-value">{{ "on" if healer_on else "off" }}</div>
     <div class="stat-sub" title="{{ llm_order|join(', ') }}">{% if llm_order %}{{ llm_order|join(", ") }}{% else %}no LLM configured{% endif %}</div>
   </div>
-  <div class="stat" hx-get="/ui/egress" hx-trigger="load" hx-swap="innerHTML">
+  <div class="stat stat-egress" hx-get="/ui/egress" hx-trigger="load" hx-swap="innerHTML">
     <div class="stat-top"><span class="stat-label">Egress</span><span class="stat-icon">{{ m.icon("wifi") }}</span></div>
     <div class="stat-value sm">…</div>
     <div class="stat-sub">looking up</div>

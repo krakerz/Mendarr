@@ -5,6 +5,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.2] — 2026-11-11
+
+### Changed
+- Redesigned the dashboard Egress card into a structured 3-row layout: top-right country tag with flag emoji, full-width monospace IP address, and active routing status indicator dot.
+- Added full country name tooltips on country badges (e.g. `Australia (AU)`).
+- Cleaned up redundant protocol schemes from upstream proxy addresses in the UI.
+
 ## [0.5.1] — 2026-11-10
 
 ### Fixed

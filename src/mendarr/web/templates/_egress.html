@@ -1,4 +1,27 @@
 {% import "_macros.html" as m with context %}
-<div class="stat-top"><span class="stat-label">Egress</span><span class="stat-icon">{{ m.icon("wifi") }}</span></div>
-<div class="stat-value sm">{{ ip }}{% if country %} <span style="display: inline-flex; align-items: center; gap: 4px; font-family: var(--font-sans); font-size: 0.75rem; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: var(--surface-3); color: var(--fg-2); vertical-align: middle; margin-left: 6px;" title="{{ country }}">{{ country | flag }} {{ country }}</span>{% endif %}</div>
-<div class="stat-sub">{% if proxy %}via {{ proxy }}{% else %}direct{% endif %}</div>
+<div class="stat-top">
+  <span class="stat-label">Egress</span>
+  <div class="egress-top-right">
+    {% if country %}
+    <span class="egress-country-tag" title="{{ country | country_name }} ({{ country }})">
+      <span class="flag">{{ country | flag }}</span>
+      <span>{{ country }}</span>
+    </span>
+    {% endif %}
+    <span class="stat-icon {{ 'green' if proxy else 'accent' }}" title="{% if proxy %}via {{ proxy }}{% else %}direct connection{% endif %}">
+      {{ m.icon("wifi") }}
+    </span>
+  </div>
+</div>
+<div class="stat-value sm" title="{{ ip }}">
+  <span class="egress-ip">{{ ip }}</span>
+</div>
+<div class="stat-sub" title="{% if proxy %}via {{ proxy }}{% else %}direct connection{% endif %}">
+  {% if proxy %}
+    <span class="egress-route"><span class="egress-dot green"></span><span class="truncate">via {{ proxy | replace("http://", "") | replace("https://", "") }}</span></span>
+  {% elif ip in ("unknown", "worker unavailable") %}
+    <span class="egress-route"><span class="egress-dot grey"></span><span>unavailable</span></span>
+  {% else %}
+    <span class="egress-route"><span class="egress-dot blue"></span><span>direct connection</span></span>
+  {% endif %}
+</div>
