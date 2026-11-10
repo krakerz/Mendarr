@@ -2,7 +2,16 @@
 
 from mendarr.plugins.guard import BACKENDS, DEFAULT_BACKEND
 
-__all__ = ["BACKENDS", "DEFAULT_BACKEND", "BackendUnavailable", "UpstreamUnreachable", "error_types"]
+__all__ = [
+    "BACKENDS",
+    "DEFAULT_BACKEND",
+    "BackendUnavailable",
+    "UpstreamUnreachable",
+    "error_types",
+    "launch_camoufox",
+    "launch_patchright",
+    "launch_obscura",
+]
 
 
 class BackendUnavailable(Exception):
@@ -23,3 +32,9 @@ def error_types(backend: str) -> tuple[type[Exception], type[Exception]]:
     except ImportError as e:
         raise BackendUnavailable(f"backend {backend!r} is not installed in this worker") from e
     return Error, TimeoutError
+
+
+# Re-export launchers for SlotPool
+from mendarr.worker.backends.camoufox import launch as launch_camoufox
+from mendarr.worker.backends.patchright import launch as launch_patchright
+from mendarr.worker.backends.obscura import launch as launch_obscura

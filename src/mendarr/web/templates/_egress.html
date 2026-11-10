@@ -1,3 +1,4 @@
-<div class="muted">Egress</div>
-<strong>{{ ip }}</strong>
-<div class="muted">{% if proxy %}via {{ proxy }}{% else %}direct{% endif %}</div>
+{% import "_macros.html" as m with context %}
+<div class="stat-top"><span class="stat-label">Egress</span><span class="stat-icon">{{ m.icon("wifi") }}</span></div>
+<div class="stat-value sm">{{ ip }}</div>
+<div class="stat-sub">{% if proxy %}via {{ proxy }}{% else %}direct{% endif %}</div>

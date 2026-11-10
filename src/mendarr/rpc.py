@@ -93,6 +93,7 @@ class SolveResult(BaseModel):
 
 class ManualStart(BaseModel):
     url: str
+    backend: str = "camoufox"
     proxy: ProxySpec | None = None
     timeout_s: float = 600  # the worker closes the session on its own after this (+ a grace period)
     slot_wait_s: float = 30

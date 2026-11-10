@@ -235,3 +235,25 @@ async def test_hold_released_by_solve(parts):
     s = await m.start(iid)
     assert await m.wait("example.org", 2.0) is True
     await finished(s)
+
+
+async def test_start_adhoc_success(parts):
+    w = FakeManualWorker([state(challenge_snap(), seen=True), state(clear_snap(), seen=True)])
+    m = manager(parts, w)
+    s = await m.start_adhoc(URL, backend="patchright")
+    assert s.incident_id is None
+    assert s.backend == "patchright"
+    assert s.domain == "example.org"
+    assert w.started[0].backend == "patchright"
+    await finished(s)
+    assert s.status == "solved"
+    cached = parts[1].get("example.org", "203.0.113.7")
+    assert cached and cached.cookies
+
+
+async def test_start_adhoc_invalid_url(parts):
+    m = manager(parts, FakeManualWorker([]))
+    with pytest.raises(ValueError):
+        await m.start_adhoc("not-a-url")
+    with pytest.raises(ValueError):
+        await m.start_adhoc("ftp://example.org/resource")

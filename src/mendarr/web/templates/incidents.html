@@ -2,34 +2,41 @@
 {% import "_macros.html" as m with context %}
 {% block title %}Incidents{% endblock %}
 {% block content %}
-<h1>Incidents</h1>
+<header class="page-head">
+  <div>
+    <h1>Incidents</h1>
+    <p class="page-sub">Challenge failures, automated healing attempts, and manual escalations.</p>
+  </div>
+</header>
 <nav class="tabs">
-  {% for key, label in tabs %}<a class="btn btn-sm{% if key == state %} btn-primary{% endif %}" href="/ui/incidents?state={{ key }}">{{ label }}</a> {% endfor %}
+  {% for key, label in tabs %}<a class="{% if key == state %}active{% endif %}" href="/ui/incidents?state={{ key }}">{{ label }}</a>{% endfor %}
 </nav>
 <div id="incident-table" hx-get="/ui/incidents?state={{ state }}" hx-select="#incident-table" hx-target="#incident-table" hx-swap="outerHTML" hx-trigger="every 15s">
 {% if rows %}
-<table class="data">
-  <thead><tr><th>#</th><th>Domain</th><th>State</th><th>Tier</th><th>Kind</th><th>Opened</th><th>Updated</th><th>Next attempt</th><th>Attempts</th><th>Note / reason</th></tr></thead>
-  <tbody>
-  {% for i in rows %}
-  {% set text = i.note or i.reason or "" %}
-  <tr>
-    <td><a href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td>
-    <td>{{ i.domain }}</td>
-    <td>{{ m.badge(i.state) }}</td>
-    <td class="num">{{ i.tier }}</td>
-    <td>{{ i.kind }}</td>
-    <td>{{ i.opened|ago }}</td>
-    <td>{{ i.updated|ago }}</td>
-    <td>{{ i.next_attempt_at|ago }}</td>
-    <td class="num">{{ i.attempts }}</td>
-    <td title="{{ text }}">{{ text[:80] }}{% if text|length > 80 %}…{% endif %}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="table-wrap">
+  <table class="data">
+    <thead><tr><th>#</th><th>Domain</th><th>State</th><th class="num">Tier</th><th>Kind</th><th>Opened</th><th>Updated</th><th>Next attempt</th><th class="num">Attempts</th><th>Note / reason</th></tr></thead>
+    <tbody>
+    {% for i in rows %}
+    {% set text = i.note or i.reason or "" %}
+    <tr>
+      <td><a class="mono" href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td>
+      <td class="cell-main">{{ i.domain }}</td>
+      <td>{{ m.badge(i.state) }}</td>
+      <td class="num">{{ i.tier }}</td>
+      <td><code>{{ i.kind }}</code></td>
+      <td class="nowrap">{{ i.opened|ago }}</td>
+      <td class="nowrap">{{ i.updated|ago }}</td>
+      <td class="nowrap">{{ i.next_attempt_at|ago }}</td>
+      <td class="num">{{ i.attempts }}</td>
+      <td title="{{ text }}"><span class="truncate">{{ text }}</span></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
-<p class="muted">No incidents here.</p>
+{{ m.empty("No incidents here.", "siren") }}
 {% endif %}
 </div>
 {% endblock %}

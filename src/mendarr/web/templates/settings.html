@@ -2,108 +2,186 @@
 {% import "_macros.html" as m with context %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Settings</h1>
-<p class="muted">Editing <code>{{ path }}</code>. Form saves rewrite the file without comments; Raw YAML keeps your text. The healer reloads the file within poll_s.</p>
-{% if error %}<p class="flash flash-err">{{ m.icon("triangle-alert") }} {{ error }}</p>{% endif %}
-{% if file_error %}<p class="flash flash-err">{{ m.icon("triangle-alert") }} The file cannot be read: {{ file_error }}. Fix it in Raw YAML first.</p>{% endif %}
-<p class="muted">Environment: healer {{ "enabled" if env.healer_enabled else "disabled" }} (MENDARR_HEALER_ENABLED), public URL {{ env.public_url or "not set" }}, data dir {{ env.data_dir }}.</p>
-
-<section id="llm" class="card">
-  <h2>LLM endpoints</h2>
-  <form method="post" action="/ui/settings/llm-order" class="form-grid">
-    {{ m.csrf_field() }}
-    <label for="order">Order (comma-separated)</label>
-    <input id="order" name="order" value="{{ order }}" placeholder="pc, laptop">
-    <span></span><button class="btn btn-primary">{{ m.icon("save") }} Save order</button>
-  </form>
-  {% for p in profiles %}
-  <hr>
-  <h3>{{ p.name }}</h3>
-  <form method="post" action="/ui/settings/llm/{{ p.name }}" class="form-grid">
-    {{ m.csrf_field() }}
-    <label>Base URL</label><input name="base_url" value="{{ p.base_url }}" required>
-    <label>Model</label><input name="model" value="{{ p.model }}" placeholder="first listed">
-    <label>API key</label><input type="password" name="api_key" autocomplete="new-password" placeholder="{{ p.secret }}">
-    <label>Clear API key</label><input type="checkbox" name="clear_api_key">
-    <label>Vision</label><input type="checkbox" name="vision"{% if p.vision %} checked{% endif %}>
-    <label>Reasoning effort</label><input name="reasoning_effort" value="{{ p.reasoning_effort }}" placeholder="default">
-    <label>Max tokens</label><input name="max_tokens" value="{{ p.max_tokens }}" placeholder="8192">
-    <label>Timeout</label><input name="timeout_s" value="{{ p.timeout_s }}" placeholder="600">
-    <span></span><button class="btn btn-primary">{{ m.icon("save") }} Save</button>
-  </form>
-  <div class="actions">
-    <button class="btn btn-sm" hx-post="/ui/settings/llm/{{ p.name }}/check" hx-target="#check-{{ p.name }}">{{ m.icon("activity") }} Check</button>
-    <span id="check-{{ p.name }}" class="muted"></span>
-    <form method="post" action="/ui/settings/llm/{{ p.name }}/delete" onsubmit="return confirm('Delete endpoint {{ p.name|e }}?')">
-      {{ m.csrf_field() }}<button class="btn btn-sm btn-danger">{{ m.icon("trash-2") }} Delete</button>
-    </form>
+<header class="page-head">
+  <div>
+    <h1>Settings</h1>
+    <p class="page-sub">Editing <code>{{ path }}</code>. Form changes rewrite the file cleanly; Raw YAML keeps custom formatting.</p>
   </div>
-  {% else %}
-  <p class="muted">No endpoints yet.</p>
-  {% endfor %}
-  <hr>
-  <h3>Add endpoint</h3>
-  <form method="post" action="/ui/settings/llm" class="form-grid">
-    {{ m.csrf_field() }}
-    <label>Name</label><input name="name" required pattern="[a-z0-9][a-z0-9_\-]{0,31}" placeholder="pc">
-    <label>Base URL</label><input name="base_url" required placeholder="http://host:1234/v1">
-    <span></span><button class="btn btn-primary">{{ m.icon("plus") }} Add</button>
-  </form>
-</section>
+</header>
 
-<section id="budgets" class="card">
-  <h2>Budgets</h2>
-  <form method="post" action="/ui/settings/budgets" class="form-grid">
-    {{ m.csrf_field() }}
-    <label>Healer enabled</label><input type="checkbox" name="enabled"{% if cfg.healer.enabled %} checked{% endif %}>
-    <label>Auto attempts (0-2)</label><input name="auto_attempts" value="{{ cfg.escalation.auto_attempts }}">
-    <label>Heal rounds</label><input name="heal_rounds" value="{{ cfg.escalation.heal_rounds }}">
-    <label>Heal windows</label><input name="heal_windows" value="{{ dur.heal_windows }}" placeholder="5m, 30m, 2h">
-    <label>Agent tier</label><input type="checkbox" name="agent_tier"{% if cfg.escalation.agent_tier %} checked{% endif %}>
-    <label>Agent wait</label><input name="agent_wait" value="{{ dur.agent_wait }}">
-    <label>Manual-solve notify</label>
-    <span>{% for c in ["discord", "webhook"] %}<label><input type="checkbox" name="manual_notify" value="{{ c }}"{% if c in cfg.escalation.manual.notify %} checked{% endif %}> {{ c }}</label> {% endfor %}</span>
-    <label>Hold requests</label><input type="checkbox" name="hold_requests"{% if cfg.escalation.manual.hold_requests %} checked{% endif %}>
-    <label>Daily rounds</label><input name="daily_rounds" value="{{ cfg.healer.daily_rounds }}">
-    <label>Traces kept</label><input name="trace_keep" value="{{ cfg.healer.trace_keep }}">
-    <label>Poll interval</label><input name="poll_s" value="{{ dur.poll_s }}">
-    <label>LLM wait</label><input name="llm_wait_s" value="{{ dur.llm_wait_s }}">
-    <label>Give up after</label><input name="give_up_after" value="{{ dur.give_up_after }}">
-    <label>Replay timeout</label><input name="replay_timeout_s" value="{{ dur.replay_timeout_s }}">
-    <label>Cross-replay max</label><input name="cross_replay_max" value="{{ cfg.healer.cross_replay_max }}">
-    <span></span><button class="btn btn-primary">{{ m.icon("save") }} Save budgets</button>
-  </form>
-  <p class="muted">Per-domain overrides: edit them in Raw YAML.</p>
-</section>
+{% if error %}<p class="flash flash-err">{{ m.icon("triangle-alert") }} <span>{{ error }}</span></p>{% endif %}
+{% if file_error %}<p class="flash flash-err">{{ m.icon("triangle-alert") }} <span>The file cannot be read: {{ file_error }}. Fix it in Raw YAML first.</span></p>{% endif %}
 
-<section id="notify" class="card">
-  <h2>Notifications</h2>
-  <form method="post" action="/ui/settings/notify" class="form-grid">
-    {{ m.csrf_field() }}
-    <label>Discord webhook</label><input type="password" name="discord_webhook" autocomplete="new-password" placeholder="{{ secrets.discord }}">
-    <label>Clear Discord webhook</label><input type="checkbox" name="clear_discord">
-    <label>Webhook URL</label><input type="password" name="webhook_url" autocomplete="new-password" placeholder="{{ secrets.webhook }}">
-    <label>Clear webhook URL</label><input type="checkbox" name="clear_webhook">
-    <label>Events</label>
-    <span>{% for e in events %}<label><input type="checkbox" name="events" value="{{ e }}"{% if cfg.notify.events[e] %} checked{% endif %}> {{ titles[e] }}</label> {% endfor %}</span>
-    <label>Timeout</label><input name="timeout_s" value="{{ dur.notify_timeout }}">
-    <span></span><button class="btn btn-primary">{{ m.icon("save") }} Save notifications</button>
-  </form>
-  <div class="actions">
-    <form hx-post="/ui/settings/notify/test" hx-target="#notify-result">
-      <select name="event" aria-label="Event">{% for e in events %}<option value="{{ e }}">{{ titles[e] }}</option>{% endfor %}</select>
-      <button class="btn btn-sm">{{ m.icon("send") }} Send test</button>
-    </form>
-    <span id="notify-result" class="muted"></span>
+<div class="card" style="margin-bottom: 24px; padding: 12px 18px; font-size: 0.8125rem;">
+  <div class="row" style="gap: 16px;">
+    <span>Healer: <strong style="color: var(--fg);">{{ "enabled" if env.healer_enabled else "disabled" }}</strong></span>
+    <span class="muted">·</span>
+    <span>Public URL: <strong style="color: var(--fg);">{{ env.public_url or "not set" }}</strong></span>
+    <span class="muted">·</span>
+    <span>Data dir: <code style="font-size: 0.75rem;">{{ env.data_dir }}</code></span>
   </div>
-</section>
+</div>
 
-<section id="raw" class="card">
-  <h2>Raw YAML</h2>
-  <form method="post" action="/ui/settings/raw">
-    {{ m.csrf_field() }}
-    <textarea class="code" name="text" spellcheck="false" aria-label="mendarr.yml">{{ text }}</textarea>
-    <p><button class="btn btn-primary">{{ m.icon("save") }} Save YAML</button></p>
-  </form>
-</section>
+<div class="stack">
+  <section id="llm" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("network") }} LLM endpoints</h2>
+    </div>
+    
+    <form method="post" action="/ui/settings/llm-order" class="form-grid" style="margin-bottom: 24px;">
+      {{ m.csrf_field() }}
+      <label for="order">Execution priority order</label>
+      <input id="order" name="order" value="{{ order }}" placeholder="pc, laptop, openrouter">
+      <span></span>
+      <div>
+        <button class="btn btn-sm btn-primary">{{ m.icon("save") }} Save order</button>
+      </div>
+    </form>
+
+    {% for p in profiles %}
+    <hr>
+    <div class="card-head" style="margin-top: 16px;">
+      <h3>Endpoint: <span class="mono">{{ p.name }}</span></h3>
+      <div class="actions">
+        <button class="btn btn-sm" hx-post="/ui/settings/llm/{{ p.name }}/check" hx-target="#check-{{ p.name }}">{{ m.icon("refresh-cw") }} Test connection</button>
+        <span id="check-{{ p.name }}" class="muted" style="font-size: 0.8125rem;"></span>
+        <form method="post" action="/ui/settings/llm/{{ p.name }}/delete" onsubmit="return confirm('Delete endpoint {{ p.name|e }}?')">
+          {{ m.csrf_field() }}
+          <button class="btn btn-sm btn-danger">{{ m.icon("trash-2") }} Delete</button>
+        </form>
+      </div>
+    </div>
+    <form method="post" action="/ui/settings/llm/{{ p.name }}" class="form-grid">
+      {{ m.csrf_field() }}
+      <label>Base URL</label><input name="base_url" value="{{ p.base_url }}" required>
+      <label>Model</label><input name="model" value="{{ p.model }}" placeholder="first listed">
+      <label>API key</label><input type="password" name="api_key" autocomplete="new-password" placeholder="{{ p.secret }}">
+      <span></span>
+      <div class="checks">
+        <label><input type="checkbox" name="clear_api_key"> Clear saved API key</label>
+        <label><input type="checkbox" name="vision"{% if p.vision %} checked{% endif %}> Support vision (screenshot inspection)</label>
+      </div>
+      <label>Reasoning effort</label><input name="reasoning_effort" value="{{ p.reasoning_effort }}" placeholder="default">
+      <label>Max tokens</label><input name="max_tokens" value="{{ p.max_tokens }}" placeholder="8192">
+      <label>Timeout (s)</label><input name="timeout_s" value="{{ p.timeout_s }}" placeholder="600">
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save endpoint</button>
+      </div>
+    </form>
+    {% else %}
+    <p class="muted">No LLM endpoints configured yet.</p>
+    {% endfor %}
+
+    <hr style="margin-top: 24px;">
+    <h3 style="margin-bottom: 16px;">Add new endpoint</h3>
+    <form method="post" action="/ui/settings/llm" class="form-grid">
+      {{ m.csrf_field() }}
+      <label>Endpoint name</label><input name="name" required pattern="[a-z0-9][a-z0-9_\-]{0,31}" placeholder="e.g. pc">
+      <label>Base URL</label><input name="base_url" required placeholder="http://host:1234/v1">
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("plus") }} Add endpoint</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="budgets" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("settings") }} Budgets & Escalation</h2>
+    </div>
+    <form method="post" action="/ui/settings/budgets" class="form-grid">
+      {{ m.csrf_field() }}
+      <label>Healer active</label>
+      <div class="checks">
+        <label><input type="checkbox" name="enabled"{% if cfg.healer.enabled %} checked{% endif %}> Enable automated healing loop</label>
+      </div>
+      <label>Auto attempts (0-2)</label><input name="auto_attempts" value="{{ cfg.escalation.auto_attempts }}">
+      <label>Heal rounds</label><input name="heal_rounds" value="{{ cfg.escalation.heal_rounds }}">
+      <label>Heal windows</label><input name="heal_windows" value="{{ dur.heal_windows }}" placeholder="5m, 30m, 2h">
+      <label>Agent tier</label>
+      <div class="checks">
+        <label><input type="checkbox" name="agent_tier"{% if cfg.escalation.agent_tier %} checked{% endif %}> Escalate to agentic repair</label>
+      </div>
+      <label>Agent wait</label><input name="agent_wait" value="{{ dur.agent_wait }}">
+      <label>Manual notify</label>
+      <div class="checks">
+        {% for c in ["discord", "webhook"] %}
+        <label><input type="checkbox" name="manual_notify" value="{{ c }}"{% if c in cfg.escalation.manual.notify %} checked{% endif %}> {{ c }}</label>
+        {% endfor %}
+      </div>
+      <label>Hold requests</label>
+      <div class="checks">
+        <label><input type="checkbox" name="hold_requests"{% if cfg.escalation.manual.hold_requests %} checked{% endif %}> Pause client requests during manual solve</label>
+      </div>
+      <label>Daily rounds max</label><input name="daily_rounds" value="{{ cfg.healer.daily_rounds }}">
+      <label>Traces kept</label><input name="trace_keep" value="{{ cfg.healer.trace_keep }}">
+      <label>Poll interval</label><input name="poll_s" value="{{ dur.poll_s }}">
+      <label>LLM wait timeout</label><input name="llm_wait_s" value="{{ dur.llm_wait_s }}">
+      <label>Give up after</label><input name="give_up_after" value="{{ dur.give_up_after }}">
+      <label>Replay timeout</label><input name="replay_timeout_s" value="{{ dur.replay_timeout_s }}">
+      <label>Cross-replay max</label><input name="cross_replay_max" value="{{ cfg.healer.cross_replay_max }}">
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save budgets</button>
+      </div>
+    </form>
+    <p class="muted" style="margin-top: 14px; font-size: 0.8125rem;">Per-domain escalation overrides can be configured directly in Raw YAML below.</p>
+  </section>
+
+  <section id="notify" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("bell") }} Notifications</h2>
+    </div>
+    <form method="post" action="/ui/settings/notify" class="form-grid" style="margin-bottom: 20px;">
+      {{ m.csrf_field() }}
+      <label>Discord webhook</label><input type="password" name="discord_webhook" autocomplete="new-password" placeholder="{{ secrets.discord }}">
+      <span></span>
+      <div class="checks">
+        <label><input type="checkbox" name="clear_discord"> Clear Discord webhook URL</label>
+      </div>
+      <label>Generic webhook</label><input type="password" name="webhook_url" autocomplete="new-password" placeholder="{{ secrets.webhook }}">
+      <span></span>
+      <div class="checks">
+        <label><input type="checkbox" name="clear_webhook"> Clear generic webhook URL</label>
+      </div>
+      <label>Trigger events</label>
+      <div class="checks">
+        {% for e in events %}
+        <label><input type="checkbox" name="events" value="{{ e }}"{% if cfg.notify.events[e] %} checked{% endif %}> {{ titles[e] }}</label>
+        {% endfor %}
+      </div>
+      <label>HTTP Timeout</label><input name="timeout_s" value="{{ dur.notify_timeout }}">
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save notifications</button>
+      </div>
+    </form>
+    <div class="card" style="background: var(--surface-2); border-color: var(--border);">
+      <div class="row" style="justify-content: space-between;">
+        <span style="font-weight: 500; font-size: 0.875rem;">Send test notification payload:</span>
+        <div class="actions">
+          <form hx-post="/ui/settings/notify/test" hx-target="#notify-result" class="row">
+            <select name="event" aria-label="Event">{% for e in events %}<option value="{{ e }}">{{ titles[e] }}</option>{% endfor %}</select>
+            <button class="btn btn-sm">{{ m.icon("send") }} Send test</button>
+          </form>
+          <span id="notify-result" class="muted"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="raw" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("file-code") }} Raw YAML Configuration</h2>
+    </div>
+    <form method="post" action="/ui/settings/raw">
+      {{ m.csrf_field() }}
+      <textarea class="code" name="text" spellcheck="false" aria-label="mendarr.yml" rows="22">{{ text }}</textarea>
+      <div style="margin-top: 14px;">
+        <button class="btn btn-primary">{{ m.icon("save") }} Save raw YAML</button>
+      </div>
+    </form>
+  </section>
+</div>
 {% endblock %}

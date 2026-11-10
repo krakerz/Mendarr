@@ -31,6 +31,16 @@ class StubManager:
             raise self.error
         return self.items["m1"]
 
+    async def start_adhoc(self, url, backend="camoufox"):
+        if self.error:
+            raise self.error
+        s = sess(sid="m3")
+        s.incident_id = None
+        s.url = url
+        s.backend = backend
+        self.items["m3"] = s
+        return s
+
     def get(self, sid):
         return self.items.get(sid)
 
@@ -51,8 +61,11 @@ def stub(ui_client):
     return m
 
 
-def post(c, url, **kw):
-    return c.post(url, data={"csrf": c.csrf}, follow_redirects=False, **kw)
+def post(c, url, data=None, **kw):
+    payload = {"csrf": c.csrf}
+    if data:
+        payload.update(data)
+    return c.post(url, data=payload, follow_redirects=False, **kw)
 
 
 def test_start_redirects(ui_client, stub):
@@ -78,11 +91,28 @@ def test_start_needs_csrf(ui_client, stub):
     assert ui_client.post("/ui/incidents/7/manual", follow_redirects=False).status_code == 403
 
 
+def test_start_adhoc_redirects(ui_client, stub):
+    r = post(ui_client, "/ui/manual/start", data={"url": "https://example.org/test", "backend": "patchright"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/ui/manual/m3"
+    assert stub.items["m3"].backend == "patchright"
+    assert stub.items["m3"].incident_id is None
+
+
+def test_start_adhoc_error(ui_client, stub):
+    stub.error = ManualError(409, "no slot")
+    r = post(ui_client, "/ui/manual/start", data={"url": "https://example.org/test"})
+    assert r.status_code == 303
+    assert r.headers["location"] == "/ui/manual?error=no%20slot"
+
+
 def test_list(ui_client, stub):
     r = ui_client.get("/ui/manual?error=boom")
     assert r.status_code == 200
     assert "example.org" in r.text and "boom" in r.text
     assert "/ui/manual/m1" in r.text
+    assert "Launch Interactive Studio" in r.text
+    assert "/ui/manual/start" in r.text
 
 
 def test_session_page(ui_client, stub):
@@ -91,6 +121,19 @@ def test_session_page(ui_client, stub):
     assert 'data-slot="1"' in r.text
     assert "/ui/static/js/manual.js" in r.text
     assert "/ui/manual/m1/cancel" in r.text
+    assert "Backend:" in r.text
+
+
+def test_adhoc_session_page_renders_crumbs(ui_client, stub):
+    stub.items["m3"] = sess(sid="m3")
+    stub.items["m3"].incident_id = None
+    stub.items["m3"].backend = "obscura"
+    r = ui_client.get("/ui/manual/m3")
+    assert r.status_code == 200
+    assert "Ad-hoc Studio" in r.text
+    assert "<code>obscura</code>" in r.text
+    r_list = ui_client.get("/ui/manual")
+    assert "Studio" in r_list.text
 
 
 def test_status_running_and_solved(ui_client, stub):

@@ -1,17 +1,26 @@
 {% import "_macros.html" as m with context %}
 {% if error %}
-<p class="flash flash-err">{{ m.icon("triangle-alert") }} {{ error }}</p>
-{% if violations %}<ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>{% endif %}
+<div class="flash flash-err">
+  {{ m.icon("triangle-alert") }}
+  <div>
+    <div style="font-weight: 600;">{{ error }}</div>
+    {% if violations %}
+    <ul style="margin: 6px 0 0; padding-left: 18px;">{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</div>
 {% else %}
-<div class="card">
-  <p>{{ m.badge("passed" if out.ok else "failed") }} {{ out.message }}</p>
+<div class="card" style="margin-top: 16px;">
+  <div class="card-head">
+    <h2>{{ m.badge("passed" if out.ok else "failed") }} <span>{{ out.message }}</span></h2>
+    <span class="muted font-mono">{{ "%.1f"|format(elapsed) }}s</span>
+  </div>
   <dl class="kv">
-    {% if out.failure %}<dt>Failure</dt><dd>{{ out.failure }}</dd>{% endif %}
-    <dt>Final URL</dt><dd>{{ out.url or "—" }}</dd>
-    <dt>Status</dt><dd>{{ out.status }}</dd>
-    <dt>Elapsed</dt><dd>{{ "%.1f"|format(elapsed) }}s</dd>
-    {% if trace_id %}<dt>Trace</dt><dd><a href="/ui/traces/{{ trace_id }}">{{ trace_id }}</a></dd>{% endif %}
+    {% if out.failure %}<dt>Failure</dt><dd><code>{{ out.failure }}</code></dd>{% endif %}
+    <dt>Final URL</dt><dd>{% if out.url %}<code>{{ out.url }}</code>{% else %}<span class="muted">—</span>{% endif %}</dd>
+    <dt>Status code</dt><dd><span class="tnum">{{ out.status }}</span></dd>
+    {% if trace_id %}<dt>Trace</dt><dd><a class="mono" href="/ui/traces/{{ trace_id }}">{{ trace_id }}</a></dd>{% endif %}
   </dl>
-  <p class="muted">Nothing was stored.</p>
+  <p class="muted" style="margin: 12px 0 0; font-size: 0.8125rem;">Test run only — nothing was stored or promoted.</p>
 </div>
 {% endif %}
