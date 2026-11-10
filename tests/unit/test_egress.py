@@ -102,3 +102,22 @@ async def test_no_upstream_means_direct():
     assert (await Egress("").info()).proxy is None
     e = egress(lambda r: httpx.Response(200, json={"ip": "1.2.3.4"}))
     assert (await e.info()).proxy is None
+
+
+async def test_country_parsed_from_response():
+    e = egress(lambda r: httpx.Response(200, json={"ip": "1.2.3.4", "country": "ro"}))
+    info = await e.info()
+    assert info.ip == "1.2.3.4"
+    assert info.country == "RO"
+
+
+async def test_country_secondary_lookup():
+    def handler(r):
+        if "api.country.is" in str(r.url):
+            return httpx.Response(200, json={"country": "JP"})
+        return httpx.Response(200, json={"ip": "93.118.41.92"})
+
+    e = egress(handler, country_url="https://api.country.is/{ip}")
+    info = await e.info()
+    assert info.ip == "93.118.41.92"
+    assert info.country == "JP"

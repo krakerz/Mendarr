@@ -20,6 +20,7 @@ class Egress:
         clock: Callable[[], float] = time.time,
         transport: httpx.AsyncBaseTransport | None = None,
         upstream: UpstreamProxy | None = None,
+        country_url: str | None = None,
     ) -> None:
         self._url = url
         self._ttl = ttl
@@ -27,6 +28,7 @@ class Egress:
         self._transport = transport
         self._upstream = upstream
         self._via = str(upstream) if upstream else None
+        self._country_url = country_url
         self._cached: EgressInfo | None = None
 
     async def info(self) -> EgressInfo:
@@ -38,19 +40,32 @@ class Egress:
         # through the upstream proxy: the cookie-cache key must be the real exit IP
         proxy = self._upstream.httpx_url() if self._upstream else None
         try:
+            country = None
             async with httpx.AsyncClient(timeout=5, transport=self._transport, proxy=proxy) as client:
                 resp = await client.get(self._url)
-            resp.raise_for_status()
-            try:
-                ip = str(resp.json()["ip"]).strip()
-            except (ValueError, KeyError, TypeError):
-                ip = resp.text.strip()
-            if not ip:
-                raise ValueError("empty egress response")
+                resp.raise_for_status()
+                try:
+                    data = resp.json()
+                    ip = str(data["ip"]).strip()
+                    if isinstance(data.get("country"), str):
+                        country = data["country"].strip().upper()
+                except (ValueError, KeyError, TypeError):
+                    ip = resp.text.strip()
+                if not ip:
+                    raise ValueError("empty egress response")
+                if not country and self._country_url and ip not in ("default", "unknown"):
+                    try:
+                        c_resp = await client.get(self._country_url.format(ip=ip))
+                        if getattr(c_resp, "is_success", False) or getattr(c_resp, "status_code", 0) == 200:
+                            c_data = c_resp.json()
+                            if isinstance(c_data.get("country"), str):
+                                country = c_data["country"].strip().upper()
+                    except Exception:
+                        pass
         except Exception as e:
             log.warning("egress lookup failed%s: %s", f" via {self._via}" if self._via else "", e)
             return EgressInfo(ip="unknown", proxy=self._via)
-        self._cached = EgressInfo(ip=ip, checked_at=now, proxy=self._via)
+        self._cached = EgressInfo(ip=ip, checked_at=now, proxy=self._via, country=country)
         return self._cached
 
     async def exit_ip(self) -> str:

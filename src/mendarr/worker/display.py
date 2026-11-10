@@ -22,9 +22,11 @@ class SlotDisplay:
         i = self.slot
         self.procs["xvfb"] = subprocess.Popen(["Xvfb", f":{i}", "-screen", "0", SCREEN, "-nolisten", "tcp"])
         # x11vnc exits at once if the X socket isn't up yet; a retry loop is cheaper than polling the socket.
+        # -noxdamage -noxfixes -noxrecord prevent Xvfb extension stalls.
+        # -nolookup -noipv6 prevent 2-3 minute reverse DNS timeouts when clients connect on remote servers.
         vnc = (
             f"for _ in $(seq 20); do x11vnc -display :{i} -rfbport {vnc_port(i)} "
-            "-localhost -nopw -forever -shared -quiet && exit 0; sleep 0.5; done; exit 1"
+            "-localhost -nopw -forever -shared -noxdamage -noxfixes -noxrecord -nolookup -noipv6 -quiet && exit 0; sleep 0.5; done; exit 1"
         )
         self.procs["x11vnc"] = subprocess.Popen(["sh", "-c", vnc])
 
