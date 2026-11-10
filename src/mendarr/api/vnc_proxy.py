@@ -28,16 +28,22 @@ def upstream_url(worker_url: str, slot: int) -> str:
 
 
 async def _client_to_up(client: WebSocket, up: Any) -> None:
-    while True:
-        msg = await client.receive()
-        if msg["type"] == "websocket.disconnect":
-            return
-        await up.send(msg.get("bytes") or (msg.get("text") or "").encode())
+    try:
+        while True:
+            msg = await client.receive()
+            if msg["type"] == "websocket.disconnect":
+                return
+            await up.send(msg.get("bytes") or (msg.get("text") or "").encode())
+    except (WebSocketDisconnect, asyncio.CancelledError):
+        return
 
 
 async def _up_to_client(client: WebSocket, up: Any) -> None:
-    async for data in up:
-        await client.send_bytes(data if isinstance(data, bytes) else data.encode())
+    try:
+        async for data in up:
+            await client.send_bytes(data if isinstance(data, bytes) else data.encode())
+    except (WebSocketDisconnect, asyncio.CancelledError):
+        return
 
 
 async def _pump(client: WebSocket, up: Any) -> None:
@@ -76,6 +82,8 @@ async def vnc(websocket: WebSocket, slot: int) -> None:
         ) as up:
             await websocket.accept(subprotocol=sub)
             await _pump(websocket, up)
+    except asyncio.CancelledError:
+        pass
     except (OSError, TimeoutError, websockets.exceptions.WebSocketException, WebSocketDisconnect) as e:
         log.warning("vnc proxy slot %s: %s", slot, e)
         with contextlib.suppress(Exception):

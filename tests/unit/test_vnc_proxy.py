@@ -88,6 +88,7 @@ def test_roundtrip(tmp_path, fake_worker):
         with c.websocket_connect("/ui/vnc/1", subprotocols=["binary"]) as ws:
             ws.send_bytes(b"RFB 003.008\n")
             assert ws.receive_bytes() == b"RFB 003.008\n"
+            ws.close()
         url, kw = fc.calls[0]
         assert url == "ws://wk:8192/vnc/1"
         assert kw["additional_headers"]["Authorization"] == "Bearer tok"
