@@ -52,6 +52,7 @@ async def test_plain_callable_is_camoufox():
 
 
 def test_error_types_camoufox():
+    pytest.importorskip("playwright")
     from playwright.async_api import Error, TimeoutError
 
     assert error_types("camoufox") == (Error, TimeoutError)

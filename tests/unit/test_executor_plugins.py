@@ -1,6 +1,8 @@
 import hashlib
 import importlib.resources
 
+import pytest
+
 from mendarr.config import Settings
 from mendarr.rpc import PluginSpec, SolveRequest
 from mendarr.worker.egress import Egress
@@ -64,6 +66,7 @@ async def test_unavailable_backend():
 
 
 async def test_upstream_unreachable_is_navigation():
+    pytest.importorskip("playwright")
     from mendarr.worker.backends import UpstreamUnreachable
 
     detail = "Upstream proxy socks5://up:1080 failed: x"
