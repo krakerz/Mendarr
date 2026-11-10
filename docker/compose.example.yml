@@ -1,0 +1,42 @@
+services:
+  mendarr-browser:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.browser
+    shm_size: 1gb
+    init: true
+    environment:
+      - MENDARR_SLOTS=2
+      - MENDARR_WORKER_TOKEN=${MENDARR_WORKER_TOKEN:?set a long random MENDARR_WORKER_TOKEN in .env}
+      # Upstream proxy for all worker traffic (browsers, cookie check, egress lookup); a dead proxy fails, never goes direct.
+      # Any HTTP(S) or SOCKS5 proxy: a LAN proxy, or a VPN container's built-in proxy (gluetun: HTTPPROXY=on -> gluetun:8888, type http).
+      # - MENDARR_PROXY_URL=192.168.1.10:1080
+      # - MENDARR_PROXY_TYPE=socks5          # http (default), https or socks5
+      # - MENDARR_PROXY_USERNAME=            # HTTP(S) proxies only
+      # - MENDARR_PROXY_PASSWORD=
+    # no published ports: only the API talks to the worker (8192, also carries the token-protected VNC bridge)
+    # hard kill switch: put the worker on an `internal: true` network that only reaches the API and the proxy
+    # plugin code runs here: no data volume, no secrets besides the worker token, no privileges
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    restart: unless-stopped
+
+  mendarr:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    ports:
+      - "8191:8191"
+    environment:
+      - MENDARR_WORKER_URL=http://mendarr-browser:8192
+      - MENDARR_UI_USER=admin
+      - MENDARR_UI_PASSWORD=${MENDARR_UI_PASSWORD:?set MENDARR_UI_PASSWORD in .env}
+      # healer: put mendarr.yml (see mendarr.example.yml) into the data volume
+      - MENDARR_PUBLIC_URL=${MENDARR_PUBLIC_URL:-}
+      - MENDARR_MCP_TOKEN=${MENDARR_MCP_TOKEN:-}  # set to enable /mcp for agents (long random string)
+      - MENDARR_DISCORD_WEBHOOK=${MENDARR_DISCORD_WEBHOOK:-}
+      - MENDARR_WORKER_TOKEN=${MENDARR_WORKER_TOKEN:?set a long random MENDARR_WORKER_TOKEN in .env}
+    volumes:
+      - ./data:/data
+    depends_on: [mendarr-browser]
+    restart: unless-stopped

@@ -1,0 +1,41 @@
+{% import "_macros.html" as m with context %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ request.state.csrf|default('') }}">
+  <title>{% block title %}Mendarr{% endblock %} · Mendarr</title>
+  <link rel="icon" href="/ui/static/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="/ui/static/app.css">
+  <script src="/ui/static/vendor/htmx/htmx.min.js" defer></script>
+  {% block head %}{% endblock %}
+</head>
+<body hx-headers='{"X-CSRF-Token": "{{ request.state.csrf|default('') }}"}'>
+{% set user = request.state.user|default('') %}
+{% if user %}
+<nav class="nav">
+  <a class="brand" href="/ui">{{ m.icon("shield-check") }} Mendarr</a>
+  {% for key, href, ic, label in [
+      ("overview", "/ui", "layout-dashboard", "Overview"),
+      ("incidents", "/ui/incidents", "siren", "Incidents"),
+      ("plugins", "/ui/plugins", "puzzle", "Plugins"),
+      ("cookies", "/ui/cookies", "cookie", "Cookies"),
+      ("manual", "/ui/manual", "mouse-pointer-click", "Manual solve"),
+      ("settings", "/ui/settings", "settings", "Settings")] %}
+  <a href="{{ href }}"{% if active|default('') == key %} class="active" aria-current="page"{% endif %}>{{ m.icon(ic) }} {{ label }}</a>
+  {% endfor %}
+  <form method="post" action="/ui/logout" class="logout">{{ m.csrf_field() }}
+    <button class="btn btn-sm" title="Log out">{{ m.icon("log-out") }} {{ user }}</button>
+  </form>
+</nav>
+{% endif %}
+<main>
+  {% if request.query_params.get('ok') %}<p class="flash flash-ok">{{ m.icon("circle-check") }} {{ request.query_params.get('ok') }}</p>{% endif %}
+  {% if request.query_params.get('err') %}<p class="flash flash-err">{{ m.icon("triangle-alert") }} {{ request.query_params.get('err') }}</p>{% endif %}
+  {% block content %}{% endblock %}
+</main>
+<footer class="muted">Mendarr {{ version }} · icons: Lucide (ISC)</footer>
+{% block scripts %}{% endblock %}
+</body>
+</html>

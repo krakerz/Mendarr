@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Trace {{ trace.id }}{% endblock %}
+{% block content %}
+<h1>Trace {{ trace.id }}</h1>
+{% include "_trace.html" %}
+{% endblock %}

@@ -1,0 +1,6 @@
+{% import "_macros.html" as m with context %}
+<div id="manual-status" {% if s.active %}hx-get="/ui/manual/{{ s.id }}/status" hx-trigger="every 2s" hx-swap="outerHTML"{% endif %}>
+  <p>{{ m.badge(s.status) }} {{ s.detail }}</p>
+  <p class="muted">Events recorded: {{ s.events }}{% if s.active %} · about {{ ((s.deadline - now) // 60)|int }} min left{% endif %}</p>
+  {% if s.status == "solved" %}<p>Solved — cookies cached, incident closed. <a href="/ui/incidents/{{ s.incident_id }}">Back to the incident</a></p>{% endif %}
+</div>

@@ -1,0 +1,65 @@
+# Mendarr healer config. Copy to <data dir>/mendarr.yml (e.g. ./data/mendarr.yml); it is reloaded when it changes.
+# `${VAR}` in a string is replaced by the environment variable of the API container.
+# Without an `llm` profile the healer still records incidents but cannot write plugins.
+
+healer:
+  enabled: true
+  poll_s: 10                # how often the healer looks for work
+  llm_wait_s: 60            # no LLM endpoint reachable: look again after this
+  daily_rounds: 12          # LLM rounds per domain per local day
+  trace_keep: 20            # traces kept per domain
+  trace_min_interval_s: 30  # at most one trace per domain in this time
+  give_up_after: 7d         # a manual incident is closed as gave_up after this
+  cross_replay_max: 5       # other open incidents a new plugin is replayed on
+  replay_timeout_s: 60
+
+escalation:
+  auto_attempts: 2          # 1 = replay the active plugin, 2 = also with the other browser backend
+  heal_rounds: 3            # LLM rounds per window
+  heal_windows: [5m, 30m, 2h]   # delay before each further window
+  agent_tier: off           # on: wait agent_wait for an agent via MCP (needs MENDARR_MCP_TOKEN) before going manual
+  agent_wait: 6h
+  manual:
+    notify: [discord, webhook]
+    hold_requests: false
+
+llm:
+  order: [desktop, mini]    # tried in this order; the first reachable endpoint is used
+  profiles:
+    desktop:
+      base_url: "http://desktop.lan:1234/v1"   # LM Studio server
+      model: gemma-4-26b-a4b                   # exact id, else the first listed id containing it
+      api_key: "${MENDARR_LLM_KEY}"
+      vision: false                            # send the trace screenshot
+      temperature: 1.0                         # Gemma vendor sampling; Gemma loops at low temperatures
+      top_p: 0.95
+      top_k: 64
+      max_tokens: 8192
+      timeout_s: 600
+      dom_chars: 24000
+    mini:
+      base_url: "http://mini.lan:1234/v1"
+      model: gemma-4-e4b
+      reasoning_effort: none                   # "none" turns Gemma 4 thinking off in LM Studio
+      max_tokens: 6144
+      dom_chars: 12000
+
+notify:
+  discord_webhook: "${MENDARR_DISCORD_WEBHOOK}"
+  webhook_url: ""           # generic JSON webhook
+  events:
+    healed: true
+    manual: true
+    rollback: true
+    default_proposed: true
+    gave_up: false
+    agent_wanted: true      # escalated to agents (agent_tier on)
+
+# Per-domain overrides, keyed by registrable domain:
+# domains:
+#   example.org:
+#     enabled: false
+#   other.example:
+#     llm_order: [desktop]
+#     daily_rounds: 4
+#     escalation: {heal_rounds: 2}

@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Plugins{% endblock %}
+{% block content %}
+<h1>Plugins</h1>
+<table class="data">
+  <thead><tr><th>Scope</th><th>Active</th><th>Versions</th><th>Candidates</th><th>Active ok/fail</th><th>Newest</th></tr></thead>
+  <tbody>
+  {% for r in rows %}
+  <tr>
+    <td><a href="/ui/plugins/{{ r.scope|urlencode }}">{{ r.scope }}</a></td>
+    <td>{{ r.active.ref if r.active else "—" }}</td>
+    <td>{{ r.versions }}</td>
+    <td>{% if r.candidates %}{{ m.badge("candidate") }} {{ r.candidates }}{% else %}0{% endif %}</td>
+    <td>{% if r.active %}{{ pct(r.active.ok, r.active.fail) }} ({{ r.active.ok }}/{{ r.active.fail }}){% else %}—{% endif %}</td>
+    <td>{{ r.newest|ago }}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<h2>New plugin for domain</h2>
+<form method="get" action="/ui/plugins/new" class="actions">
+  <input name="scope" placeholder="example.org" required>
+  <button class="btn">{{ m.icon("plus") }} Create</button>
+</form>
+{% endblock %}

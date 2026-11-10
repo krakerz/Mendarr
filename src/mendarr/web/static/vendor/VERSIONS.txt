@@ -1,0 +1,4 @@
+vendor/htmx/htmx.min.js  https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/dist/htmx.min.js  e209dda5c8235479f3166defc7750e1dbcd5a5c1808b7792fc2e6733768fb447
+vendor/htmx/LICENSE  https://cdn.jsdelivr.net/npm/htmx.org@2.0.4/LICENSE  d3d2456f76414f2456104660ebd65aff1c04cd7966b942bdabd63f3cdb316a38
+vendor/lucide/LICENSE  https://cdn.jsdelivr.net/npm/lucide-static@0.469.0/LICENSE  1e7290b35280a048667bbf0ebabac1c7fd52a75300e8b2946ac165715997f2bc
+vendor/lucide/sprite.svg  lucide-static@0.469.0 (built from 35 icons)  18f5845d832dbe413d96800efbb71d898ff234c28e7f989260c479171de6801c

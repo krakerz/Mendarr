@@ -1,0 +1,48 @@
+[project]
+name = "mendarr"
+version = "0.1.0"
+description = "Self-healing, FlareSolverr-compatible Cloudflare solver"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "pydantic-settings",
+    "httpx",
+    "tldextract",
+    "pyyaml",
+    "jinja2",
+    "python-multipart",
+    "websockets>=13",
+    "mcp>=1.30,<2",
+]
+
+[project.optional-dependencies]
+browser = [
+    "camoufox[geoip]",
+    "curl_cffi",
+    "httpx[socks]>=0.28.1",
+    "patchright",
+]
+
+[project.scripts]
+mendarr = "mendarr.cli:main"
+mendarr-worker = "mendarr.worker.server:main"
+
+[dependency-groups]
+dev = ["pytest", "pytest-asyncio"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/mendarr"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+markers = [
+    "e2e: needs the test-env compose stack (MENDARR_E2E_URL)",
+    "e2e_online: loads Cloudflare's Turnstile test widget from the internet (MENDARR_E2E_ONLINE=1)",
+]

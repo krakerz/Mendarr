@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Manual solve{% endblock %}
+{% block content %}
+<h1>Manual solve</h1>
+{% if error %}<p class="muted" role="alert">{{ error }}</p>{% endif %}
+{% if sessions %}
+<table class="data">
+  <thead><tr><th>Domain</th><th>Incident</th><th>Status</th><th>Slot</th><th>Started</th><th></th></tr></thead>
+  <tbody>
+  {% for s in sessions %}
+  <tr>
+    <td>{{ s.domain }}</td>
+    <td><a href="/ui/incidents/{{ s.incident_id }}">#{{ s.incident_id }}</a></td>
+    <td>{{ m.badge(s.status) }}</td>
+    <td class="num">{{ s.slot }}</td>
+    <td>{{ s.started|ts }}</td>
+    <td>{% if s.active %}<a href="/ui/manual/{{ s.id }}">Open</a>{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No manual solve sessions. Start one from an incident.</p>
+{% endif %}
+{% endblock %}

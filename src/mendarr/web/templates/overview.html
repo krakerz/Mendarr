@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Overview{% endblock %}
+{% block content %}
+<h1>Overview</h1>
+<div class="cards">
+  <div class="card"><div class="muted">Open incidents</div><a href="/ui/incidents"><strong>{{ incidents|length }}</strong></a></div>
+  <div class="card"><div class="muted">Domains</div><strong>{{ rows|length }}</strong></div>
+  <div class="card"><div class="muted">Cached cookie entries</div><strong>{{ cookies }}</strong></div>
+  <div class="card"><div class="muted">Healer</div>
+    <strong>{{ "on" if healer_on else "off" }}</strong>
+    <div class="muted">{% if llm_order %}{{ llm_order|join(", ") }}{% else %}no LLM configured{% endif %}</div></div>
+  <div class="card" hx-get="/ui/egress" hx-trigger="load" hx-swap="innerHTML"><div class="muted">Egress</div><strong>…</strong></div>
+</div>
+<div id="overview" hx-get="/ui" hx-select="#overview" hx-swap="outerHTML" hx-trigger="every 15s">
+  {% if rows %}
+  <table class="data">
+    <thead><tr><th>Domain</th><th>Solves 24 h</th><th>7 d</th><th>Last</th><th>Active plugin</th><th>Cookie expiry</th><th>Incidents</th></tr></thead>
+    <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.domain }}</td>
+      <td class="num">{% if r.day %}{{ pct(r.day.ok, r.day.fail) }} <span class="muted">{{ r.day.ok }}/{{ r.day.total }}</span>{% else %}—{% endif %}</td>
+      <td class="num">{% if r.week %}{{ pct(r.week.ok, r.week.fail) }} <span class="muted">{{ r.week.ok }}/{{ r.week.total }}</span>{% else %}—{% endif %}</td>
+      <td>{{ (r.week.last_at if r.week else None)|ago }}</td>
+      <td><a href="/ui/plugins/{{ r.scope }}">{{ r.plugin }}</a>{% if r.fallback %} <span class="muted">(fallback)</span>{% endif %}</td>
+      <td>{% if r.cookie_expires %}{{ r.cookie_expires|ago }}{% if r.cookie_expires < now %} {{ m.badge("expired") }}{% endif %}{% else %}—{% endif %}</td>
+      <td>{% for i in r.incidents %}<a href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a> {{ m.badge(i.state) }} {% else %}—{% endfor %}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">No traffic yet.</p>
+  {% endif %}
+  <h2>Recent open incidents</h2>
+  {% if incidents %}
+  <table class="data">
+    <thead><tr><th>#</th><th>Domain</th><th>State</th><th>Kind</th><th>Opened</th></tr></thead>
+    <tbody>
+    {% for i in incidents %}
+    <tr><td><a href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td><td>{{ i.domain }}</td><td>{{ m.badge(i.state) }}</td><td>{{ i.kind }}</td><td>{{ i.opened|ago }}</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="muted">None.</p>
+  {% endif %}
+</div>
+{% endblock %}

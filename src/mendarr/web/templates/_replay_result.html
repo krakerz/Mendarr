@@ -1,0 +1,17 @@
+{% import "_macros.html" as m with context %}
+{% if error %}
+<p class="flash flash-err">{{ m.icon("triangle-alert") }} {{ error }}</p>
+{% if violations %}<ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>{% endif %}
+{% else %}
+<div class="card">
+  <p>{{ m.badge("passed" if out.ok else "failed") }} {{ out.message }}</p>
+  <dl class="kv">
+    {% if out.failure %}<dt>Failure</dt><dd>{{ out.failure }}</dd>{% endif %}
+    <dt>Final URL</dt><dd>{{ out.url or "—" }}</dd>
+    <dt>Status</dt><dd>{{ out.status }}</dd>
+    <dt>Elapsed</dt><dd>{{ "%.1f"|format(elapsed) }}s</dd>
+    {% if trace_id %}<dt>Trace</dt><dd><a href="/ui/traces/{{ trace_id }}">{{ trace_id }}</a></dd>{% endif %}
+  </dl>
+  <p class="muted">Nothing was stored.</p>
+</div>
+{% endif %}

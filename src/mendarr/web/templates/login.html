@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Login{% endblock %}
+{% block content %}
+<div class="card login">
+  <h1>{{ m.icon("shield-check") }} Mendarr</h1>
+  {% if error %}<p class="flash flash-err">{{ error }}</p>{% endif %}
+  {% if not configured %}
+  <p class="flash flash-err">Dashboard login is disabled: set MENDARR_UI_USER and MENDARR_UI_PASSWORD.</p>
+  {% else %}
+  <form method="post" action="/ui/login" class="form-grid">
+    <input type="hidden" name="next" value="{{ next }}">
+    <label for="user">User</label>
+    <input id="user" name="user" autocomplete="username" autofocus required>
+    <label for="password">Password</label>
+    <input id="password" name="password" type="password" autocomplete="current-password" required>
+    <span></span>
+    <button class="btn btn-primary">{{ m.icon("log-in") }} Log in</button>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}

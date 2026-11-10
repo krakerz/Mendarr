@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Manual solve{% endblock %}
+{% block content %}
+<h1>Manual solve — {{ s.domain }}</h1>
+<p><code>{{ s.url }}</code></p>
+<p class="muted">Solve the challenge in the live view below. Mendarr notices success on its own.</p>
+{% include "_manual_status.html" %}
+{% if s.active %}
+<form method="post" action="/ui/manual/{{ s.id }}/cancel">{{ m.csrf_field() }}
+  <button class="btn">Cancel</button></form>
+{% endif %}
+<p>Live view: <span id="vnc-conn">connecting…</span></p>
+<div id="vnc" data-slot="{{ s.slot }}" data-active="{{ 1 if s.active else 0 }}" style="width:100%;height:75vh;background:#222"></div>
+{% endblock %}
+{% block scripts %}<script type="module" src="/ui/static/js/manual.js"></script>{% endblock %}

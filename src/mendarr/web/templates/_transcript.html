@@ -1,0 +1,8 @@
+{% if messages is none and response is none %}
+<p class="muted">Transcript not saved.</p>
+{% else %}
+{% for msg in messages or [] %}
+<details><summary>{{ msg.role }} · {{ msg.text|length }} chars</summary><pre class="code">{{ msg.text }}</pre></details>
+{% endfor %}
+{% if response is not none %}<h4>Response</h4><pre class="code">{{ response }}</pre>{% endif %}
+{% endif %}

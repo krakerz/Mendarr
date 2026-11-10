@@ -1,0 +1,8 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ code }}{% endblock %}
+{% block content %}
+<h1>{{ code }}</h1>
+<p>{{ message }}</p>
+<p><a href="/ui">Back to the overview</a></p>
+{% endblock %}

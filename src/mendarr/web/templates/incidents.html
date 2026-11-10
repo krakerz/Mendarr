@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Incidents{% endblock %}
+{% block content %}
+<h1>Incidents</h1>
+<nav class="tabs">
+  {% for key, label in tabs %}<a class="btn btn-sm{% if key == state %} btn-primary{% endif %}" href="/ui/incidents?state={{ key }}">{{ label }}</a> {% endfor %}
+</nav>
+<div id="incident-table" hx-get="/ui/incidents?state={{ state }}" hx-select="#incident-table" hx-target="#incident-table" hx-swap="outerHTML" hx-trigger="every 15s">
+{% if rows %}
+<table class="data">
+  <thead><tr><th>#</th><th>Domain</th><th>State</th><th>Tier</th><th>Kind</th><th>Opened</th><th>Updated</th><th>Next attempt</th><th>Attempts</th><th>Note / reason</th></tr></thead>
+  <tbody>
+  {% for i in rows %}
+  {% set text = i.note or i.reason or "" %}
+  <tr>
+    <td><a href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td>
+    <td>{{ i.domain }}</td>
+    <td>{{ m.badge(i.state) }}</td>
+    <td class="num">{{ i.tier }}</td>
+    <td>{{ i.kind }}</td>
+    <td>{{ i.opened|ago }}</td>
+    <td>{{ i.updated|ago }}</td>
+    <td>{{ i.next_attempt_at|ago }}</td>
+    <td class="num">{{ i.attempts }}</td>
+    <td title="{{ text }}">{{ text[:80] }}{% if text|length > 80 %}…{% endif %}</td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p class="muted">No incidents here.</p>
+{% endif %}
+</div>
+{% endblock %}

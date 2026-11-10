@@ -1,0 +1,9 @@
+{% macro icon(name, cls="") -%}
+<svg class="icon {{ cls }}" aria-hidden="true" focusable="false"><use href="/ui/static/vendor/lucide/sprite.svg#{{ name }}"></use></svg>
+{%- endmacro %}
+{% macro csrf_field() -%}
+<input type="hidden" name="csrf" value="{{ request.state.csrf|default('') }}">
+{%- endmacro %}
+{% macro badge(text) -%}
+<span class="badge badge-{{ text|replace('_', '-') }}">{{ text|replace('_', ' ') }}</span>
+{%- endmacro %}

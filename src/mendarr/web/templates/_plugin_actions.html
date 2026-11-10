@@ -1,0 +1,12 @@
+{% import "_macros.html" as m with context %}
+<span class="actions">
+  {% if rec.status in ("candidate", "retired") %}
+  <form method="post" action="/ui/plugins/{{ scope|urlencode }}/promote">{{ m.csrf_field() }}<input type="hidden" name="version" value="{{ rec.version }}"><button class="btn btn-sm">{{ m.icon("circle-check") }} Promote</button></form>
+  {% endif %}
+  {% if rec.status == "candidate" %}
+  <form method="post" action="/ui/plugins/{{ scope|urlencode }}/reject">{{ m.csrf_field() }}<input type="hidden" name="version" value="{{ rec.version }}"><button class="btn btn-sm btn-danger">{{ m.icon("trash-2") }} Reject</button></form>
+  {% endif %}
+  {% set base = rec.parent if rec.parent else (rec.version - 1) %}
+  {% if base >= 1 and base != rec.version %}<a class="btn btn-sm" href="/ui/plugins/{{ scope|urlencode }}/diff?a={{ base }}&amp;b={{ rec.version }}">Diff</a>{% endif %}
+  <a class="btn btn-sm" href="/ui/plugins/{{ scope|urlencode }}/edit?from={{ rec.version }}">Edit as new</a>
+</span>

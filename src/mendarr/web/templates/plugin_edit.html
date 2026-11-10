@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Edit {{ scope }}{% endblock %}
+{% block content %}
+<h1>Edit plugin: {{ scope }}</h1>
+{% if from_ref %}<p class="muted">Based on {{ from_ref }}. Submitting stores a new candidate version; nothing is overwritten.</p>{% endif %}
+{% if error %}
+<p class="flash flash-err">{{ m.icon("triangle-alert") }} {{ error }}</p>
+{% if violations %}<ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>{% endif %}
+{% endif %}
+<form method="post" action="/ui/plugins/{{ scope|urlencode }}/submit">
+  {{ m.csrf_field() }}
+  <p><textarea class="code" name="source" rows="28" spellcheck="false">{{ source }}</textarea></p>
+  <p><label>Test URL <input name="url" type="url" value="{{ url }}" size="50"></label></p>
+  <p><label>Notes <input name="notes" value="{{ notes }}" size="50"></label></p>
+  <p><label><input type="checkbox" name="promote" value="1"> Promote now (no passing test required)</label></p>
+  <p class="actions">
+    <button type="button" class="btn" hx-post="/ui/plugins/{{ scope|urlencode }}/test" hx-target="#result" hx-include="closest form" hx-indicator="#testing">{{ m.icon("play") }} Test run</button>
+    <span id="testing" class="htmx-indicator">running…</span>
+    <button class="btn">{{ m.icon("save") }} Submit</button>
+  </p>
+</form>
+<div id="result"></div>
+<p><a href="/ui/plugins/{{ scope|urlencode }}">← {{ scope }}</a></p>
+{% endblock %}

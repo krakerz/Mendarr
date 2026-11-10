@@ -1,0 +1,48 @@
+{% import "_macros.html" as m with context %}
+{% set meta = trace.meta %}
+<div class="split">
+  <div>
+    {% if meta.has_screenshot %}<a href="/ui/traces/{{ trace.id }}/screenshot.png"><img class="screenshot" src="/ui/traces/{{ trace.id }}/screenshot.png" alt="Screenshot"></a>{% else %}<p class="muted">No screenshot.</p>{% endif %}
+  </div>
+  <dl class="kv">
+    <dt>Kind</dt><dd>{{ meta.kind }}</dd>
+    <dt>Failure</dt><dd>{{ meta.failure }}</dd>
+    <dt>Detail</dt><dd>{{ meta.detail }}</dd>
+    <dt>Final URL</dt><dd>{{ meta.final_url }}</dd>
+    <dt>Status</dt><dd>{{ meta.status }}</dd>
+    <dt>Title</dt><dd>{{ meta.title }}</dd>
+    <dt>Plugin</dt><dd>{{ meta.plugin }}</dd>
+    <dt>Challenge seen</dt><dd>{{ meta.challenge_seen }}</dd>
+    <dt>Clicks</dt><dd>{{ meta.clicks }}</dd>
+    <dt>Error</dt><dd>{% if meta.error %}{{ meta.error.type }}: {{ meta.error.detail }}{% endif %}</dd>
+    <dt>At</dt><dd>{{ meta.at|ts }}</dd>
+    <dt>Headers</dt><dd>{% for k, v in (meta.headers or {}).items() %}{{ k }}: {{ v }}<br>{% endfor %}</dd>
+  </dl>
+</div>
+{% set steps = meta.steps or [] %}
+{% set console = meta.console or [] %}
+{% set network = meta.network or [] %}
+{% set frames = meta.frames or [] %}
+<details><summary>Plugin log ({{ steps|length }})</summary><pre class="code">{{ steps|join("\n") }}</pre></details>
+<details><summary>Console ({{ console|length }})</summary><pre class="code">{{ console|join("\n") }}</pre></details>
+<details><summary>Network ({{ network|length }})</summary>
+  <table class="data">
+    <thead><tr><th>Status</th><th>Type</th><th>URL</th><th>cf</th><th>failure</th></tr></thead>
+    <tbody>
+    {% for n in network %}
+    <tr{% if not n.status or n.status >= 400 %} class="bad"{% endif %}>
+      <td>{{ n.status }}</td><td>{{ n.type }}</td>
+      <td title="{{ n.url }}">{{ n.url[:120] }}{% if n.url|length > 120 %}…{% endif %}</td>
+      <td>{{ n.cf }}</td><td>{{ n.failure }}</td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</details>
+<details><summary>Frames ({{ frames|length }})</summary><pre class="code">{% for f in frames %}{{ f if f is string else f|tojson }}
+{% endfor %}</pre></details>
+<details><summary>DOM ({{ trace.dom|length }} chars)</summary>
+  <p><a href="/ui/traces/{{ trace.id }}/dom" target="_blank" rel="noopener">Open rendered (sandboxed)</a></p>
+  <pre class="code">{{ trace.dom }}</pre>
+</details>
+{% if meta.extra %}<h3>Demo data</h3><pre class="code">{{ meta.extra|tojson(indent=2) }}</pre>{% endif %}

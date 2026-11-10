@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Cookies{% endblock %}
+{% block content %}
+<h1>Cookies</h1>
+{% if entries %}
+<table class="data">
+  <thead><tr><th>Domain</th><th>Egress</th><th>UA</th><th>Cookies</th><th>Solved</th><th>Expires</th><th></th></tr></thead>
+  <tbody>
+  {% for e in entries %}
+  <tr>
+    <td>{{ e.domain }}</td>
+    <td>{{ e.egress }}</td>
+    <td title="{{ e.ua }}">{{ e.ua[:40] }}{% if e.ua|length > 40 %}…{% endif %}</td>
+    <td>{% for c in e.cookies %}{% if c.name == "cf_clearance" %}<strong>{{ c.name }}</strong>{% else %}{{ c.name }}{% endif %}{% if not loop.last %}, {% endif %}{% endfor %}</td>
+    <td>{{ e.solved_at|ts }}</td>
+    <td>{{ e.expires_at|ago }}{% if e.expires_at < now %} {{ m.badge("expired") }}{% endif %}</td>
+    <td class="actions">
+      <form method="post" action="/ui/cookies/purge" onsubmit="return confirm('Purge cookies for {{ e.domain|e }}?')">
+        {{ m.csrf_field() }}<input type="hidden" name="domain" value="{{ e.domain }}">
+        <button class="btn btn-sm btn-danger">{{ m.icon("trash-2") }} Purge</button>
+      </form>
+    </td>
+  </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<form method="post" action="/ui/cookies/purge" class="actions" onsubmit="return confirm('Purge all cached cookies?')">
+  {{ m.csrf_field() }}<input type="hidden" name="domain" value="">
+  <button class="btn btn-danger">{{ m.icon("trash-2") }} Purge all</button>
+</form>
+{% else %}
+<p class="muted">No cached cookies.</p>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}Diff {{ scope }}{% endblock %}
+{% block content %}
+<h1>Diff: {{ a.ref }} → {{ b.ref }}</h1>
+{% if lines %}
+<pre class="diff">{% for cls, t in lines %}<span class="{{ cls }}">{{ t }}</span>{% endfor %}</pre>
+{% else %}
+<p class="muted">No differences.</p>
+{% endif %}
+<p><a href="/ui/plugins/{{ scope|urlencode }}">← {{ scope }}</a></p>
+{% endblock %}

@@ -1,0 +1,2 @@
+{% import "_macros.html" as m with context %}
+{% for state, text in lines %}<div>{{ m.badge(state) }} {{ text }}</div>{% endfor %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m with context %}
+{% block title %}{{ rec.ref }}{% endblock %}
+{% block content %}
+<h1>{{ rec.ref }} {{ m.badge(rec.status) }}</h1>
+<dl class="kv">
+  <dt>Author</dt><dd>{{ rec.author }}</dd>
+  <dt>Backend</dt><dd>{{ rec.backend }}</dd>
+  <dt>Created</dt><dd>{{ rec.created|ts }}</dd>
+  <dt>Parent</dt><dd>{{ ("v" ~ rec.parent) if rec.parent else "—" }}</dd>
+  <dt>ok / fail</dt><dd>{{ rec.ok }} / {{ rec.fail }} ({{ pct(rec.ok, rec.fail) }})</dd>
+  <dt>sha256</dt><dd>{{ rec.sha256 }}</dd>
+  <dt>Notes</dt><dd>{{ rec.notes or "—" }}</dd>
+</dl>
+<p>{% include "_plugin_actions.html" %}</p>
+<pre class="code">{{ rec.source }}</pre>
+<p><a href="/ui/plugins/{{ scope|urlencode }}">← {{ scope }}</a></p>
+{% endblock %}
