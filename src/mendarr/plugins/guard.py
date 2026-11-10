@@ -9,7 +9,7 @@ import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-BACKENDS = ("camoufox", "patchright")
+BACKENDS = ("camoufox", "patchright", "obscura")
 DEFAULT_BACKEND = "camoufox"
 MAX_SOURCE_BYTES = 64 * 1024
 

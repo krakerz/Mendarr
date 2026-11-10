@@ -23,7 +23,7 @@ the final page and cookies; a plugin cannot fake it.
 
 Rules:
 - Reply with exactly ONE fenced ```python block that holds the COMPLETE new plugin file.
-- The file defines a literal dict META ("backend": "camoufox" or "patchright", "notes": what you changed)
+- The file defines a literal dict META ("backend": "camoufox", "patchright", or "obscura", "notes": what you changed)
   and `async def solve(page, ctx)`.
 - Use only the SDK and the Playwright calls shown in the reference. Allowed imports: asyncio, re, random,
   math, time (never time.sleep) and mendarr.sdk. No other imports, no file, network or process access, no
@@ -54,6 +54,9 @@ def extract_plugin(text: str) -> str:
     return blocks[-1].strip() + "\n"
 
 
+BACKEND_CYCLE = {"camoufox": "patchright", "patchright": "obscura", "obscura": "camoufox"}
+
+
 def switch_backend(source: str) -> str | None:
     try:
         tree = ast.parse(source)
@@ -71,7 +74,8 @@ def switch_backend(source: str) -> str | None:
                 meta = ast.literal_eval(node.value)
             except ValueError:
                 return None
-            new = "patchright" if meta.get("backend", "camoufox") == "camoufox" else "camoufox"
+            current = meta.get("backend", "camoufox")
+            new = BACKEND_CYCLE.get(current, "camoufox")
             meta["backend"] = new
             meta["notes"] = f"healer: backend switch to {new}"
             lines = source.splitlines(keepends=True)

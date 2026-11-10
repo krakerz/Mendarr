@@ -1,8 +1,16 @@
 {% if messages is none and response is none %}
-<p class="muted">Transcript not saved.</p>
+<p class="muted" style="font-size: 0.8125rem;">Transcript not saved.</p>
 {% else %}
 {% for msg in messages or [] %}
-<details><summary>{{ msg.role }} · {{ msg.text|length }} chars</summary><pre class="code">{{ msg.text }}</pre></details>
+<details style="margin-top: 8px;">
+  <summary style="font-size: 0.8125rem;">{{ msg.role }} · <span class="muted">{{ msg.text|length }} chars</span></summary>
+  <pre class="code">{{ msg.text }}</pre>
+</details>
 {% endfor %}
-{% if response is not none %}<h4>Response</h4><pre class="code">{{ response }}</pre>{% endif %}
+{% if response is not none %}
+<div style="margin-top: 12px;">
+  <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; color: var(--muted); margin-bottom: 4px;">LLM Response</div>
+  <pre class="code">{{ response }}</pre>
+</div>
+{% endif %}
 {% endif %}

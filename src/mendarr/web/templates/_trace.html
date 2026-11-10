@@ -1,48 +1,89 @@
 {% import "_macros.html" as m with context %}
 {% set meta = trace.meta %}
-<div class="split">
-  <div>
-    {% if meta.has_screenshot %}<a href="/ui/traces/{{ trace.id }}/screenshot.png"><img class="screenshot" src="/ui/traces/{{ trace.id }}/screenshot.png" alt="Screenshot"></a>{% else %}<p class="muted">No screenshot.</p>{% endif %}
+<div class="card" style="margin-bottom: 24px;">
+  <div class="split">
+    <div>
+      {% if meta.has_screenshot %}
+      <a href="/ui/traces/{{ trace.id }}/screenshot.png" target="_blank" title="View full screenshot">
+        <img class="screenshot" src="/ui/traces/{{ trace.id }}/screenshot.png" alt="Failure Screenshot">
+      </a>
+      {% else %}
+      {{ m.empty("No screenshot captured.", "image") }}
+      {% endif %}
+    </div>
+    <dl class="kv">
+      <dt>Failure kind</dt><dd><code>{{ meta.kind }}</code></dd>
+      <dt>Failure</dt><dd><code>{{ meta.failure }}</code></dd>
+      <dt>Detail</dt><dd>{{ meta.detail or "—" }}</dd>
+      <dt>Final URL</dt><dd>{% if meta.final_url %}<code>{{ meta.final_url }}</code>{% else %}<span class="muted">—</span>{% endif %}</dd>
+      <dt>Status code</dt><dd><span class="tnum">{{ meta.status }}</span></dd>
+      <dt>Page title</dt><dd>{{ meta.title or "—" }}</dd>
+      <dt>Active plugin</dt><dd><code>{{ meta.plugin }}</code></dd>
+      <dt>Challenge seen</dt><dd>{{ meta.challenge_seen }}</dd>
+      <dt>Click count</dt><dd><span class="tnum">{{ meta.clicks }}</span></dd>
+      <dt>Error</dt><dd>{% if meta.error %}<code>{{ meta.error.type }}</code>: {{ meta.error.detail }}{% else %}<span class="muted">—</span>{% endif %}</dd>
+      <dt>Timestamp</dt><dd>{{ meta.at|ts }} <span class="muted">({{ meta.at|ago }})</span></dd>
+      <dt>Headers</dt><dd>{% for k, v in (meta.headers or {}).items() %}<code>{{ k }}</code>: {{ v }}<br>{% else %}<span class="muted">—</span>{% endfor %}</dd>
+    </dl>
   </div>
-  <dl class="kv">
-    <dt>Kind</dt><dd>{{ meta.kind }}</dd>
-    <dt>Failure</dt><dd>{{ meta.failure }}</dd>
-    <dt>Detail</dt><dd>{{ meta.detail }}</dd>
-    <dt>Final URL</dt><dd>{{ meta.final_url }}</dd>
-    <dt>Status</dt><dd>{{ meta.status }}</dd>
-    <dt>Title</dt><dd>{{ meta.title }}</dd>
-    <dt>Plugin</dt><dd>{{ meta.plugin }}</dd>
-    <dt>Challenge seen</dt><dd>{{ meta.challenge_seen }}</dd>
-    <dt>Clicks</dt><dd>{{ meta.clicks }}</dd>
-    <dt>Error</dt><dd>{% if meta.error %}{{ meta.error.type }}: {{ meta.error.detail }}{% endif %}</dd>
-    <dt>At</dt><dd>{{ meta.at|ts }}</dd>
-    <dt>Headers</dt><dd>{% for k, v in (meta.headers or {}).items() %}{{ k }}: {{ v }}<br>{% endfor %}</dd>
-  </dl>
 </div>
+
 {% set steps = meta.steps or [] %}
 {% set console = meta.console or [] %}
 {% set network = meta.network or [] %}
 {% set frames = meta.frames or [] %}
-<details><summary>Plugin log ({{ steps|length }})</summary><pre class="code">{{ steps|join("\n") }}</pre></details>
-<details><summary>Console ({{ console|length }})</summary><pre class="code">{{ console|join("\n") }}</pre></details>
-<details><summary>Network ({{ network|length }})</summary>
-  <table class="data">
-    <thead><tr><th>Status</th><th>Type</th><th>URL</th><th>cf</th><th>failure</th></tr></thead>
-    <tbody>
-    {% for n in network %}
-    <tr{% if not n.status or n.status >= 400 %} class="bad"{% endif %}>
-      <td>{{ n.status }}</td><td>{{ n.type }}</td>
-      <td title="{{ n.url }}">{{ n.url[:120] }}{% if n.url|length > 120 %}…{% endif %}</td>
-      <td>{{ n.cf }}</td><td>{{ n.failure }}</td>
-    </tr>
-    {% endfor %}
-    </tbody>
-  </table>
+
+<div class="section-head">
+  <h2>Diagnostic logs</h2>
+</div>
+
+<details>
+  <summary>Plugin execution log <span class="badge badge-info" style="margin-left: auto;">{{ steps|length }} steps</span></summary>
+  <pre class="code">{{ steps|join("\n") if steps else "No plugin steps recorded." }}</pre>
 </details>
-<details><summary>Frames ({{ frames|length }})</summary><pre class="code">{% for f in frames %}{{ f if f is string else f|tojson }}
-{% endfor %}</pre></details>
-<details><summary>DOM ({{ trace.dom|length }} chars)</summary>
-  <p><a href="/ui/traces/{{ trace.id }}/dom" target="_blank" rel="noopener">Open rendered (sandboxed)</a></p>
+
+<details>
+  <summary>Browser console <span class="badge badge-info" style="margin-left: auto;">{{ console|length }} entries</span></summary>
+  <pre class="code">{{ console|join("\n") if console else "No console messages." }}</pre>
+</details>
+
+<details>
+  <summary>Network activity <span class="badge badge-info" style="margin-left: auto;">{{ network|length }} requests</span></summary>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Status</th><th>Type</th><th>URL</th><th>Cloudflare</th><th>Failure</th></tr></thead>
+      <tbody>
+      {% for n in network %}
+      <tr{% if not n.status or n.status >= 400 %} class="bad"{% endif %}>
+        <td><span class="tnum">{{ n.status or "ERR" }}</span></td>
+        <td><code>{{ n.type }}</code></td>
+        <td title="{{ n.url }}"><span class="truncate" style="max-width: 60ch;">{{ n.url }}</span></td>
+        <td>{{ n.cf or "—" }}</td>
+        <td>{{ n.failure or "—" }}</td>
+      </tr>
+      {% else %}
+      <tr><td colspan="5" class="muted">No network requests captured.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+
+<details>
+  <summary>Frame hierarchy <span class="badge badge-info" style="margin-left: auto;">{{ frames|length }} frames</span></summary>
+  <pre class="code">{% for f in frames %}{{ f if f is string else f|tojson }}
+{% else %}No frame records.{% endfor %}</pre>
+</details>
+
+<details>
+  <summary>Captured DOM structure <span class="badge badge-info" style="margin-left: auto;">{{ trace.dom|length }} chars</span></summary>
+  <p style="margin-top: 10px;"><a class="btn btn-sm" href="/ui/traces/{{ trace.id }}/dom" target="_blank" rel="noopener">{{ m.icon("external-link") }} Open rendered HTML (sandboxed)</a></p>
   <pre class="code">{{ trace.dom }}</pre>
 </details>
-{% if meta.extra %}<h3>Demo data</h3><pre class="code">{{ meta.extra|tojson(indent=2) }}</pre>{% endif %}
+
+{% if meta.extra %}
+<div class="card" style="margin-top: 16px;">
+  <div class="card-head"><h2>Demo execution metadata</h2></div>
+  <pre class="code">{{ meta.extra|tojson(indent=2) }}</pre>
+</div>
+{% endif %}

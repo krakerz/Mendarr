@@ -13,29 +13,56 @@
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ request.state.csrf|default('') }}"}'>
 {% set user = request.state.user|default('') %}
+{% block page %}
+{% macro flashes() %}
+  {% if request.query_params.get('ok') %}<p class="flash flash-ok">{{ m.icon("circle-check") }}<span>{{ request.query_params.get('ok') }}</span></p>{% endif %}
+  {% if request.query_params.get('err') %}<p class="flash flash-err">{{ m.icon("triangle-alert") }}<span>{{ request.query_params.get('err') }}</span></p>{% endif %}
+{% endmacro %}
 {% if user %}
-<nav class="nav">
-  <a class="brand" href="/ui">{{ m.icon("shield-check") }} Mendarr</a>
-  {% for key, href, ic, label in [
-      ("overview", "/ui", "layout-dashboard", "Overview"),
-      ("incidents", "/ui/incidents", "siren", "Incidents"),
-      ("plugins", "/ui/plugins", "puzzle", "Plugins"),
-      ("cookies", "/ui/cookies", "cookie", "Cookies"),
-      ("manual", "/ui/manual", "mouse-pointer-click", "Manual solve"),
-      ("settings", "/ui/settings", "settings", "Settings")] %}
-  <a href="{{ href }}"{% if active|default('') == key %} class="active" aria-current="page"{% endif %}>{{ m.icon(ic) }} {{ label }}</a>
-  {% endfor %}
-  <form method="post" action="/ui/logout" class="logout">{{ m.csrf_field() }}
-    <button class="btn btn-sm" title="Log out">{{ m.icon("log-out") }} {{ user }}</button>
-  </form>
-</nav>
-{% endif %}
-<main>
-  {% if request.query_params.get('ok') %}<p class="flash flash-ok">{{ m.icon("circle-check") }} {{ request.query_params.get('ok') }}</p>{% endif %}
-  {% if request.query_params.get('err') %}<p class="flash flash-err">{{ m.icon("triangle-alert") }} {{ request.query_params.get('err') }}</p>{% endif %}
-  {% block content %}{% endblock %}
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/ui"><span class="brand-mark">{{ m.icon("shield-check") }}</span><span>Mendarr</span></a>
+    <div class="nav-label">Monitor</div>
+    {% for key, href, ic, label in [
+        ("overview", "/ui", "layout-dashboard", "Overview"),
+        ("incidents", "/ui/incidents", "siren", "Incidents"),
+        ("manual", "/ui/manual", "mouse-pointer-click", "Manual solve")] %}
+    <a class="nav-link{% if active|default('') == key %} active{% endif %}" href="{{ href }}"{% if active|default('') == key %} aria-current="page"{% endif %}>{{ m.icon(ic) }}<span>{{ label }}</span></a>
+    {% endfor %}
+    <div class="nav-label" style="margin-top: 12px">Manage</div>
+    {% for key, href, ic, label in [
+        ("plugins", "/ui/plugins", "puzzle", "Plugins"),
+        ("cookies", "/ui/cookies", "cookie", "Cookies"),
+        ("settings", "/ui/settings", "settings", "Settings")] %}
+    <a class="nav-link{% if active|default('') == key %} active{% endif %}" href="{{ href }}"{% if active|default('') == key %} aria-current="page"{% endif %}>{{ m.icon(ic) }}<span>{{ label }}</span></a>
+    {% endfor %}
+    <div class="sidebar-foot">
+      <div class="user-row">
+        <span class="avatar">{{ user[:1] }}</span>
+        <span class="user-name">{{ user }}</span>
+        <form method="post" action="/ui/logout">{{ m.csrf_field() }}
+          <button class="btn btn-ghost btn-icon btn-sm" title="Log out" aria-label="Log out">{{ m.icon("log-out") }}</button>
+        </form>
+      </div>
+      <div class="version">Mendarr {{ version }} · icons: Lucide (ISC)</div>
+    </div>
+  </aside>
+  <main class="content">
+    <div class="content-inner">
+      {{ flashes() }}
+      {% block content %}{% endblock %}
+    </div>
+  </main>
+</div>
+{% else %}
+<main class="content">
+  <div class="content-inner">
+    {{ flashes() }}
+    {{ self.content() }}
+  </div>
 </main>
-<footer class="muted">Mendarr {{ version }} · icons: Lucide (ISC)</footer>
+{% endif %}
+{% endblock %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

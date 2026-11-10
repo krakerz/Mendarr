@@ -2,24 +2,54 @@
 {% import "_macros.html" as m with context %}
 {% block title %}Edit {{ scope }}{% endblock %}
 {% block content %}
-<h1>Edit plugin: {{ scope }}</h1>
-{% if from_ref %}<p class="muted">Based on {{ from_ref }}. Submitting stores a new candidate version; nothing is overwritten.</p>{% endif %}
+<div class="crumbs">
+  <a href="/ui/plugins">Plugins</a>
+  <span>/</span>
+  <a href="/ui/plugins/{{ scope|urlencode }}">{{ scope }}</a>
+  <span>/</span>
+  <span>Edit</span>
+</div>
+<header class="page-head">
+  <div>
+    <h1>Edit plugin: <span class="mono">{{ scope }}</span></h1>
+    {% if from_ref %}<p class="page-sub">Based on <code>{{ from_ref }}</code>. Submitting stores a new candidate version; nothing is overwritten.</p>{% endif %}
+  </div>
+</header>
 {% if error %}
-<p class="flash flash-err">{{ m.icon("triangle-alert") }} {{ error }}</p>
-{% if violations %}<ul>{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>{% endif %}
+<div class="flash flash-err">
+  {{ m.icon("triangle-alert") }}
+  <div>
+    <div style="font-weight: 600;">{{ error }}</div>
+    {% if violations %}
+    <ul style="margin: 6px 0 0; padding-left: 18px;">{% for v in violations %}<li>{{ v }}</li>{% endfor %}</ul>
+    {% endif %}
+  </div>
+</div>
 {% endif %}
 <form method="post" action="/ui/plugins/{{ scope|urlencode }}/submit">
   {{ m.csrf_field() }}
-  <p><textarea class="code" name="source" rows="28" spellcheck="false">{{ source }}</textarea></p>
-  <p><label>Test URL <input name="url" type="url" value="{{ url }}" size="50"></label></p>
-  <p><label>Notes <input name="notes" value="{{ notes }}" size="50"></label></p>
-  <p><label><input type="checkbox" name="promote" value="1"> Promote now (no passing test required)</label></p>
-  <p class="actions">
+  <div class="card" style="margin-bottom: 20px;">
+    <div class="field" style="margin-bottom: 16px;">
+      <label for="plugin-src">Python solver script</label>
+      <textarea id="plugin-src" class="code" name="source" rows="24" spellcheck="false">{{ source }}</textarea>
+    </div>
+    <div class="form-grid">
+      <label for="url">Test target URL</label>
+      <input id="url" name="url" type="url" value="{{ url }}" placeholder="https://{{ scope }}/...">
+      <label for="notes">Version notes</label>
+      <input id="notes" name="notes" value="{{ notes }}" placeholder="Explain changes or bugfix">
+      <span></span>
+      <div class="checks">
+        <label><input type="checkbox" name="promote" value="1"> Promote to active immediately (skip mandatory replay validation)</label>
+      </div>
+    </div>
+  </div>
+  <div class="actions-bar">
     <button type="button" class="btn" hx-post="/ui/plugins/{{ scope|urlencode }}/test" hx-target="#result" hx-include="closest form" hx-indicator="#testing">{{ m.icon("play") }} Test run</button>
-    <span id="testing" class="htmx-indicator">running…</span>
-    <button class="btn">{{ m.icon("save") }} Submit</button>
-  </p>
+    <span id="testing" class="htmx-indicator muted" style="font-size: 0.8125rem;">running test against target…</span>
+    <button class="btn btn-primary">{{ m.icon("save") }} Submit version</button>
+    <a class="btn btn-ghost" href="/ui/plugins/{{ scope|urlencode }}">Cancel</a>
+  </div>
 </form>
-<div id="result"></div>
-<p><a href="/ui/plugins/{{ scope|urlencode }}">← {{ scope }}</a></p>
+<div id="result" style="margin-top: 20px;"></div>
 {% endblock %}

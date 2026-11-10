@@ -2,6 +2,15 @@
 {% import "_macros.html" as m with context %}
 {% block title %}Trace {{ trace.id }}{% endblock %}
 {% block content %}
-<h1>Trace {{ trace.id }}</h1>
+<div class="crumbs">
+  <a href="/ui/incidents">Incidents</a>
+  <span>/</span>
+  <span>Trace {{ trace.id }}</span>
+</div>
+<header class="page-head">
+  <div>
+    <h1>Trace: <span class="mono">{{ trace.id }}</span></h1>
+  </div>
+</header>
 {% include "_trace.html" %}
 {% endblock %}

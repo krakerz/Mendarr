@@ -2,11 +2,24 @@
 {% import "_macros.html" as m with context %}
 {% block title %}Diff {{ scope }}{% endblock %}
 {% block content %}
-<h1>Diff: {{ a.ref }} → {{ b.ref }}</h1>
+<div class="crumbs">
+  <a href="/ui/plugins">Plugins</a>
+  <span>/</span>
+  <a href="/ui/plugins/{{ scope|urlencode }}">{{ scope }}</a>
+  <span>/</span>
+  <span>Diff</span>
+</div>
+<header class="page-head">
+  <div>
+    <h1>Diff: <span class="mono">{{ a.ref }}</span> <span class="muted">→</span> <span class="mono">{{ b.ref }}</span></h1>
+  </div>
+  <div class="actions">
+    <a class="btn btn-sm" href="/ui/plugins/{{ scope|urlencode }}">Back to {{ scope }}</a>
+  </div>
+</header>
 {% if lines %}
 <pre class="diff">{% for cls, t in lines %}<span class="{{ cls }}">{{ t }}</span>{% endfor %}</pre>
 {% else %}
-<p class="muted">No differences.</p>
+{{ m.empty("No differences between these two versions.") }}
 {% endif %}
-<p><a href="/ui/plugins/{{ scope|urlencode }}">← {{ scope }}</a></p>
 {% endblock %}

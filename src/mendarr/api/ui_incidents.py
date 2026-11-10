@@ -143,6 +143,21 @@ def close(request: Request, iid: int, state: str = Form(...)) -> Response:
     return _redirect(iid, f"Closed as {state.replace('_', ' ')}")
 
 
+@router.post("/incidents/clear")
+def clear_closed(request: Request) -> Response:
+    count = request.app.state.store.clear_closed_incidents()
+    return RedirectResponse(f"/ui/incidents?ok={quote(f'{count} closed incident(s) cleared')}", status_code=303)
+
+
+@router.post("/incidents/{iid:int}/delete")
+def delete_incident(request: Request, iid: int) -> Response:
+    st = request.app.state
+    if st.store.incident(iid) is None:
+        return error_page(request, 404, f"No incident #{iid}")
+    st.store.delete_incident(iid)
+    return RedirectResponse(f"/ui/incidents?ok={quote(f'Incident #{iid} deleted')}", status_code=303)
+
+
 @router.get("/traces/{trace_id}")
 def trace_page(request: Request, trace_id: str) -> Response:
     trace = request.app.state.traces.load(trace_id)

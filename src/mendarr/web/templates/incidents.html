@@ -2,34 +2,55 @@
 {% import "_macros.html" as m with context %}
 {% block title %}Incidents{% endblock %}
 {% block content %}
-<h1>Incidents</h1>
+<header class="page-head">
+  <div>
+    <h1>Incidents</h1>
+    <p class="page-sub">Challenge failures, automated healing attempts, and manual escalations.</p>
+  </div>
+  {% if rows and (rows|selectattr("state", "in", ["solved", "gave_up"])|list) %}
+  <div class="actions">
+    <form method="post" action="/ui/incidents/clear" onsubmit="return confirm('Clear all solved and closed incidents?')">{{ m.csrf_field() }}<button class="btn btn-sm btn-ghost btn-danger">{{ m.icon("trash-2") }} Clear closed</button></form>
+  </div>
+  {% endif %}
+</header>
 <nav class="tabs">
-  {% for key, label in tabs %}<a class="btn btn-sm{% if key == state %} btn-primary{% endif %}" href="/ui/incidents?state={{ key }}">{{ label }}</a> {% endfor %}
+  {% for key, label in tabs %}<a class="{% if key == state %}active{% endif %}" href="/ui/incidents?state={{ key }}">{{ label }}</a>{% endfor %}
 </nav>
 <div id="incident-table" hx-get="/ui/incidents?state={{ state }}" hx-select="#incident-table" hx-target="#incident-table" hx-swap="outerHTML" hx-trigger="every 15s">
 {% if rows %}
-<table class="data">
-  <thead><tr><th>#</th><th>Domain</th><th>State</th><th>Tier</th><th>Kind</th><th>Opened</th><th>Updated</th><th>Next attempt</th><th>Attempts</th><th>Note / reason</th></tr></thead>
-  <tbody>
-  {% for i in rows %}
-  {% set text = i.note or i.reason or "" %}
-  <tr>
-    <td><a href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td>
-    <td>{{ i.domain }}</td>
-    <td>{{ m.badge(i.state) }}</td>
-    <td class="num">{{ i.tier }}</td>
-    <td>{{ i.kind }}</td>
-    <td>{{ i.opened|ago }}</td>
-    <td>{{ i.updated|ago }}</td>
-    <td>{{ i.next_attempt_at|ago }}</td>
-    <td class="num">{{ i.attempts }}</td>
-    <td title="{{ text }}">{{ text[:80] }}{% if text|length > 80 %}…{% endif %}</td>
-  </tr>
-  {% endfor %}
-  </tbody>
-</table>
+<div class="table-wrap">
+  <table class="data">
+    <thead><tr>
+      <th style="width: 50px;">#</th>
+      <th style="min-width: 130px;">Domain</th>
+      <th style="width: 90px;">State</th>
+      <th style="min-width: 120px;">Kind</th>
+      <th>Activity</th>
+      <th>Next attempt</th>
+      <th class="num">Attempts</th>
+      <th>Note / Reason</th>
+      <th class="actions-cell"></th>
+    </tr></thead>
+    <tbody>
+    {% for i in rows %}
+    {% set text = i.note or i.reason or "" %}
+    <tr>
+      <td style="width: 50px;"><a class="mono" href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td>
+      <td class="cell-main mono">{{ i.domain }}</td>
+      <td>{{ m.badge(i.state) }}</td>
+      <td class="nowrap"><span class="badge mono" style="font-size: 0.72rem;">{{ i.kind }}</span></td>
+      <td class="nowrap"><div style="display: flex; flex-direction: column; gap: 2px;"><span>{{ i.opened|ago }}</span><span class="muted" style="font-size: 0.75rem;">updated {{ i.updated|ago }}</span></div></td>
+      <td class="nowrap muted" style="font-size: 0.8125rem;">{{ i.next_attempt_at|ago }}</td>
+      <td class="num">{{ i.attempts }}</td>
+      <td title="{{ text }}"><span class="truncate" style="max-width: 320px;">{{ text }}</span></td>
+      <td class="actions-cell"><a class="btn btn-sm btn-ghost" href="/ui/incidents/{{ i.id }}">View</a></td>
+    </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
 {% else %}
-<p class="muted">No incidents here.</p>
+{{ m.empty("No incidents here.", "siren") }}
 {% endif %}
 </div>
 {% endblock %}

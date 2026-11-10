@@ -28,7 +28,7 @@ from mendarr.rpc import (
     SolveResult,
     WorkerInfo,
 )
-from mendarr.worker.backends import BACKENDS, camoufox, patchright
+from mendarr.worker.backends import BACKENDS, camoufox, patchright, obscura
 from mendarr.worker.backends.camoufox import Launcher
 from mendarr.worker.check import CookieChecker
 from mendarr.worker.display import DisplayManager, vnc_port
@@ -64,6 +64,7 @@ def create_app(
         launchers = {
             "camoufox": functools.partial(camoufox.launch, settings=settings, exit_ip=egress.exit_ip),
             "patchright": functools.partial(patchright.launch, settings=settings),
+            "obscura": functools.partial(obscura.launch, settings=settings),
         }
     pool = SlotPool(settings.slots, launchers)
     sessions = SessionManager(pool)

@@ -60,7 +60,7 @@ class ManualSessions:
         context = None
         try:
             egress = await self.egress.current(req.proxy)
-            browser = await self.pool.browser(slot)
+            browser = await self.pool.browser(slot, req.backend)
             context = await browser.new_context(proxy=pw_proxy(req.proxy))
             demo = DemoRecorder()
             await demo.install(context)
@@ -77,7 +77,7 @@ class ManualSessions:
                 demo=demo,
                 stack=stack,
                 egress=egress,
-                user_agent=self.pool.user_agent(slot),
+                user_agent=self.pool.user_agent(slot, req.backend),
             )
             context.on("page", lambda p: self._on_new_page(s, p))
         except BaseException:

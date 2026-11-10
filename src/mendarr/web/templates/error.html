@@ -2,7 +2,14 @@
 {% import "_macros.html" as m with context %}
 {% block title %}{{ code }}{% endblock %}
 {% block content %}
-<h1>{{ code }}</h1>
-<p>{{ message }}</p>
-<p><a href="/ui">Back to the overview</a></p>
+<div class="empty" style="padding: 60px 20px; max-width: 500px; margin: 40px auto;">
+  <span class="brand-mark" style="background: var(--red-bg); color: var(--red); width: 48px; height: 48px; border-radius: 12px; margin-bottom: 8px;">
+    {{ m.icon("triangle-alert", "icon-lg") }}
+  </span>
+  <h1 style="font-size: 2rem; font-variant-numeric: tabular-nums;">{{ code }}</h1>
+  <p style="color: var(--fg); font-size: 1rem; margin-top: 4px;">{{ message }}</p>
+  <div style="margin-top: 16px;">
+    <a class="btn btn-primary" href="/ui">{{ m.icon("layout-dashboard") }} Back to Overview</a>
+  </div>
+</div>
 {% endblock %}

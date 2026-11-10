@@ -35,7 +35,9 @@ def test_switch_backend_both_ways():
     flipped = switch_backend(SRC)
     assert "'backend': 'patchright'" in flipped.splitlines()[0]
     assert flipped.splitlines()[1:] == SRC.splitlines()[1:]
-    back = switch_backend(flipped)
+    obscura = switch_backend(flipped)
+    assert "'backend': 'obscura'" in obscura.splitlines()[0]
+    back = switch_backend(obscura)
     assert "'backend': 'camoufox'" in back and "async def solve" in back
 
 

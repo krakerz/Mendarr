@@ -83,6 +83,7 @@ class NotifyEvents(_Model):
 
 class NotifyConfig(_Model):
     discord_webhook: str = ""
+    discord_ping: str = ""
     webhook_url: str = ""
     events: NotifyEvents = NotifyEvents()
     timeout_s: Duration = 10

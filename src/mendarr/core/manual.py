@@ -11,6 +11,7 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal
+from urllib.parse import urlparse
 
 from mendarr.api.worker_client import WorkerClient, WorkerRejected, WorkerUnavailable
 from mendarr.core.cookies import CookieCache
@@ -37,20 +38,21 @@ class ManualError(Exception):
 @dataclass
 class ManualSession:
     id: str  # the worker's session id (also the UI's)
-    incident_id: int
-    domain: str
-    url: str
-    slot: int
-    started: float  # wall clock
-    deadline: float  # wall clock
+    incident_id: int | None = None
+    domain: str = ""
+    url: str = ""
+    slot: int = 0
+    deadline: float = 0.0
+    started: float = 0.0
     status: Status = "running"
-    detail: str = ""
+    detail: str = "solve the challenge in the live view"
     user_agent: str = ""
     egress: str = ""
     events: int = 0
     trace_id: str = ""
     ended: float | None = None
     task: asyncio.Task | None = field(default=None, repr=False)
+    backend: str = "camoufox"
 
     @property
     def active(self) -> bool:
@@ -83,7 +85,7 @@ class ManualManager:
         self._sessions: dict[str, ManualSession] = {}
         self._holds: dict[str, asyncio.Event] = {}
 
-    async def start(self, incident_id: int) -> ManualSession:
+    async def start(self, incident_id: int, backend: str = "camoufox") -> ManualSession:
         inc = self._store.incident(incident_id)
         if inc is None:
             raise ManualError(404, "no such incident")
@@ -95,7 +97,9 @@ class ManualManager:
             if s.active and (s.incident_id == incident_id or s.domain == inc["domain"]):
                 return s
         try:
-            started = await self._worker.manual_start(ManualStart(url=inc["url"], timeout_s=self._timeout_s))
+            started = await self._worker.manual_start(
+                ManualStart(url=inc["url"], backend=backend, timeout_s=self._timeout_s)
+            )
         except WorkerRejected as e:
             if e.status == 409:
                 raise ManualError(409, "no free browser slot, try again when a solve finishes") from e
@@ -118,10 +122,46 @@ class ManualManager:
             deadline=now + self._timeout_s,
             user_agent=started.user_agent,
             egress=started.egress,
+            backend=backend,
         )
         self._sessions[s.id] = s
         s.task = asyncio.create_task(self._watch(s))
         log.info("manual solve %s started for %s (incident %d, slot %d)", s.id, s.domain, incident_id, s.slot)
+        return s
+
+    async def start_adhoc(self, url: str, backend: str = "camoufox") -> ManualSession:
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise ValueError(f"invalid URL: {url!r}")
+        domain = registrable_domain(url)
+        if not domain:
+            raise ValueError(f"could not determine registrable domain: {url!r}")
+        try:
+            started = await self._worker.manual_start(
+                ManualStart(url=url, backend=backend, timeout_s=self._timeout_s)
+            )
+        except WorkerRejected as e:
+            if e.status == 409:
+                raise ManualError(409, "no free browser slot, try again when a solve finishes") from e
+            raise ManualError(503, f"worker unavailable: {e}") from e
+        except (WorkerUnavailable, TimeoutError) as e:
+            raise ManualError(503, f"worker unavailable: {e}") from e
+        now = self._clock()
+        s = ManualSession(
+            id=started.id,
+            incident_id=None,
+            domain=domain,
+            url=url,
+            slot=started.slot,
+            started=now,
+            deadline=now + self._timeout_s,
+            user_agent=started.user_agent,
+            egress=started.egress,
+            backend=backend,
+        )
+        self._sessions[s.id] = s
+        s.task = asyncio.create_task(self._watch(s))
+        log.info("ad-hoc manual solve %s started for %s (slot %d, backend %s)", s.id, domain, s.slot, backend)
         return s
 
     def get(self, sid: str) -> ManualSession | None:
@@ -129,6 +169,12 @@ class ManualManager:
 
     def sessions(self) -> list[ManualSession]:
         return sorted(self._sessions.values(), key=lambda s: s.started, reverse=True)
+
+    def clear_finished(self) -> int:
+        to_remove = [sid for sid, s in self._sessions.items() if not s.active]
+        for sid in to_remove:
+            del self._sessions[sid]
+        return len(to_remove)
 
     def active_for_slot(self, slot: int) -> ManualSession | None:
         return next((s for s in self._sessions.values() if s.active and s.slot == slot), None)
@@ -190,10 +236,11 @@ class ManualManager:
                 if self._clock() >= s.deadline:
                     await self._end(s, "expired", "no solve in time")
                     return
-                inc = self._store.incident(s.incident_id)
-                if inc is None or inc["state"] not in OPEN_INCIDENTS:
-                    await self._end(s, "cancelled", "incident closed meanwhile")
-                    return
+                if s.incident_id is not None:
+                    inc = self._store.incident(s.incident_id)
+                    if inc is None or inc["state"] not in OPEN_INCIDENTS:
+                        await self._end(s, "cancelled", "incident closed meanwhile")
+                        return
                 try:
                     st = await self._worker.manual_state(s.id)
                 except WorkerRejected as e:
@@ -269,16 +316,19 @@ class ManualManager:
             or ""
         )
         now = self._clock()
-        self._store.update_incident(s.incident_id, state="solved", next_attempt_at=None, note="solved manually")
-        self._store.resolve_domain(s.domain, "solved manually")
-        self._store.add_attempt(
-            s.incident_id,
-            tier=3,
-            result="manual_solved",
-            detail=f"{len(res.demo.get('events', []))} demo events",
-            trace_id=trace_id,
-            elapsed_s=now - s.started,
-        )
+        if s.incident_id is not None:
+            self._store.update_incident(s.incident_id, state="solved", next_attempt_at=None, note="solved manually")
+            self._store.resolve_domain(s.domain, "solved manually")
+            self._store.add_attempt(
+                s.incident_id,
+                tier=3,
+                result="manual_solved",
+                detail=f"{len(res.demo.get('events', []))} demo events",
+                trace_id=trace_id,
+                elapsed_s=now - s.started,
+            )
+        else:
+            self._store.resolve_domain(s.domain, "solved manually")
         s.trace_id = trace_id
         self._mark(s, "solved", "solved manually")
         ev = self._holds.pop(s.domain, None)
@@ -289,22 +339,24 @@ class ManualManager:
     async def _end(self, s: ManualSession, status: Status, detail: str) -> None:
         with contextlib.suppress(WorkerUnavailable, TimeoutError):
             await self._worker.manual_cancel(s.id)
-        try:
-            self._store.add_attempt(
-                s.incident_id, tier=3, result=f"manual_{status}", detail=detail,
-                elapsed_s=self._clock() - s.started,
-            )
-        except Exception:
-            log.exception("could not record the manual attempt for %s", s.id)
+        if s.incident_id is not None:
+            try:
+                self._store.add_attempt(
+                    s.incident_id, tier=3, result=f"manual_{status}", detail=detail,
+                    elapsed_s=self._clock() - s.started,
+                )
+            except Exception:
+                log.exception("could not record the manual attempt for %s", s.id)
         self._mark(s, status, detail)
 
     def _fail(self, s: ManualSession, detail: str) -> None:
-        try:
-            self._store.add_attempt(
-                s.incident_id, tier=3, result="manual_failed", detail=detail, elapsed_s=self._clock() - s.started
-            )
-        except Exception:
-            log.exception("could not record the manual attempt for %s", s.id)
+        if s.incident_id is not None:
+            try:
+                self._store.add_attempt(
+                    s.incident_id, tier=3, result="manual_failed", detail=detail, elapsed_s=self._clock() - s.started
+                )
+            except Exception:
+                log.exception("could not record the manual attempt for %s", s.id)
         self._mark(s, "failed", detail)
 
     def _mark(self, s: ManualSession, status: Status, detail: str) -> None:

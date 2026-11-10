@@ -32,6 +32,27 @@ async def test_discord_embed():
     assert body["username"] == "Mendarr" and e["title"] == "Healed: e.com" and e["color"] == COLORS["healed"]
     assert e["url"] == "http://m.lan:8191/ui/incidents/7"
     assert {f["name"] for f in e["fields"]} == {"Failure", "Plugin"} and "thumbnail" not in e
+    assert "content" not in body
+    await n.aclose()
+
+
+async def test_discord_ping():
+    seen, h = recorder(204)
+    n = notifier(h)
+    cfg = NotifyConfig(discord_webhook="http://discord.test/hook", discord_ping="@here")
+    await n.send(cfg, Notice("manual", "e.com", "help"), channels=("discord",))
+    body = json.loads(seen[0].content)
+    assert body.get("content") == "@here"
+    await n.aclose()
+
+
+async def test_discord_ping_with_screenshot():
+    seen, h = recorder()
+    n = notifier(h)
+    cfg = NotifyConfig(discord_webhook="http://discord.test/hook", discord_ping="@everyone")
+    await n.send(cfg, Notice("manual", "e.com", "m", 1, screenshot=b"PNGDATA"), channels=("discord",))
+    req = seen[0]
+    assert b'"content": "@everyone"' in req.content
     await n.aclose()
 
 

@@ -7,3 +7,6 @@
 {% macro badge(text) -%}
 <span class="badge badge-{{ text|replace('_', '-') }}">{{ text|replace('_', ' ') }}</span>
 {%- endmacro %}
+{% macro empty(text, ic="circle-check") -%}
+<div class="empty">{{ icon(ic) }}<p>{{ text }}</p></div>
+{%- endmacro %}

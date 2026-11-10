@@ -3,7 +3,7 @@
 import time
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, Request
+from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from mendarr.api.auth import require_user
@@ -34,6 +34,21 @@ async def start_manual(request: Request, iid: int) -> Response:
     except ManualError as e:
         return _go(request, f"/ui/manual?error={quote(str(e))}")
     return _go(request, f"/ui/manual/{s.id}")
+
+
+@router.post("/manual/start")
+async def start_adhoc_manual(request: Request, url: str = Form(), backend: str = Form("camoufox")) -> Response:
+    try:
+        s = await _manager(request).start_adhoc(url.strip(), backend=backend.strip())
+    except (ManualError, ValueError) as e:
+        return _go(request, f"/ui/manual?error={quote(str(e))}")
+    return _go(request, f"/ui/manual/{s.id}")
+
+
+@router.post("/manual/clear")
+async def clear_manual_sessions(request: Request) -> Response:
+    count = _manager(request).clear_finished()
+    return _go(request, f"/ui/manual?ok={quote(f'Cleared {count} finished session(s)')}")
 
 
 @router.get("/manual", response_class=HTMLResponse)

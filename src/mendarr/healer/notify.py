@@ -74,7 +74,9 @@ class Notifier:
         return embed
 
     async def _discord(self, cfg: NotifyConfig, n: Notice) -> httpx.Response:
-        payload = {"username": "Mendarr", "embeds": [self._embed(n)]}
+        payload: dict = {"username": "Mendarr", "embeds": [self._embed(n)]}
+        if cfg.discord_ping.strip():
+            payload["content"] = cfg.discord_ping.strip()
         if n.screenshot:
             return await self._http.post(
                 cfg.discord_webhook,

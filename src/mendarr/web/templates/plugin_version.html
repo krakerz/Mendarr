@@ -2,17 +2,38 @@
 {% import "_macros.html" as m with context %}
 {% block title %}{{ rec.ref }}{% endblock %}
 {% block content %}
-<h1>{{ rec.ref }} {{ m.badge(rec.status) }}</h1>
-<dl class="kv">
-  <dt>Author</dt><dd>{{ rec.author }}</dd>
-  <dt>Backend</dt><dd>{{ rec.backend }}</dd>
-  <dt>Created</dt><dd>{{ rec.created|ts }}</dd>
-  <dt>Parent</dt><dd>{{ ("v" ~ rec.parent) if rec.parent else "—" }}</dd>
-  <dt>ok / fail</dt><dd>{{ rec.ok }} / {{ rec.fail }} ({{ pct(rec.ok, rec.fail) }})</dd>
-  <dt>sha256</dt><dd>{{ rec.sha256 }}</dd>
-  <dt>Notes</dt><dd>{{ rec.notes or "—" }}</dd>
-</dl>
-<p>{% include "_plugin_actions.html" %}</p>
-<pre class="code">{{ rec.source }}</pre>
-<p><a href="/ui/plugins/{{ scope|urlencode }}">← {{ scope }}</a></p>
+<div class="crumbs">
+  <a href="/ui/plugins">Plugins</a>
+  <span>/</span>
+  <a href="/ui/plugins/{{ scope|urlencode }}">{{ scope }}</a>
+  <span>/</span>
+  <span>v{{ rec.version }}</span>
+</div>
+<header class="page-head">
+  <div>
+    <h1><span class="mono">{{ rec.ref }}</span> {{ m.badge(rec.status) }}</h1>
+  </div>
+  <div class="actions">
+    {% include "_plugin_actions.html" %}
+  </div>
+</header>
+
+<div class="card" style="margin-bottom: 24px;">
+  <dl class="kv">
+    <dt>Author</dt><dd><code>{{ rec.author }}</code></dd>
+    <dt>Backend</dt><dd><code>{{ rec.backend }}</code></dd>
+    <dt>Created</dt><dd>{{ rec.created|ts }} <span class="muted">({{ rec.created|ago }})</span></dd>
+    <dt>Parent</dt><dd>{% if rec.parent %}<a class="mono" href="/ui/plugins/{{ scope|urlencode }}/v{{ rec.parent }}">v{{ rec.parent }}</a>{% else %}<span class="muted">—</span>{% endif %}</dd>
+    <dt>Success rate</dt><dd><span class="tnum">{{ rec.ok }} ok / {{ rec.fail }} fail</span> <span class="muted">({{ pct(rec.ok, rec.fail) }})</span></dd>
+    <dt>SHA-256</dt><dd><code>{{ rec.sha256 }}</code></dd>
+    <dt>Notes</dt><dd>{{ rec.notes or "—" }}</dd>
+  </dl>
+</div>
+
+<section>
+  <div class="section-head">
+    <h2>Source code</h2>
+  </div>
+  <pre class="code">{{ rec.source }}</pre>
+</section>
 {% endblock %}

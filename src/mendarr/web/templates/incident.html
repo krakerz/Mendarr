@@ -2,50 +2,73 @@
 {% import "_macros.html" as m with context %}
 {% block title %}Incident #{{ inc.id }}{% endblock %}
 {% block content %}
-<h1>#{{ inc.id }} {{ inc.domain }} {{ m.badge(inc.state) }}</h1>
-<dl class="kv">
-  <dt>URL</dt><dd>{{ inc.url }}{% if inc.url %} <a href="{{ inc.url }}" rel="noreferrer noopener" target="_blank">{{ m.icon("external-link") }}</a>{% endif %}</dd>
-  <dt>Kind</dt><dd>{{ inc.kind }}</dd>
-  <dt>Tier</dt><dd>{{ inc.tier }}</dd>
-  <dt>Heal window</dt><dd>{{ inc.heal_window + 1 }}</dd>
-  <dt>Failures</dt><dd>{{ inc.failures }}</dd>
-  <dt>Attempts</dt><dd>{{ inc.attempts }}</dd>
-  <dt>Opened</dt><dd>{{ inc.opened|ts }}</dd>
-  <dt>Updated</dt><dd>{{ inc.updated|ts }}</dd>
-  <dt>Closed</dt><dd>{{ inc.closed|ts }}</dd>
-  <dt>Next attempt</dt><dd>{{ inc.next_attempt_at|ago }}</dd>
-  <dt>Reason</dt><dd>{{ inc.reason }}</dd>
-  <dt>Note</dt><dd>{{ inc.note }}</dd>
-  <dt>Plugin</dt><dd>{% if plugin_scope %}<a href="/ui/plugins/{{ plugin_scope|urlencode }}">{{ inc.plugin }}</a>{% else %}{{ inc.plugin }}{% endif %}</dd>
-</dl>
-<div class="actions">
-  <form method="post" action="/ui/incidents/{{ inc.id }}/retry">{{ m.csrf_field() }}
-    <button class="btn">{{ m.icon("refresh-cw") }} Heal again now</button></form>
-  {% if not closed %}
-  <form method="post" action="/ui/incidents/{{ inc.id }}/close">{{ m.csrf_field() }}<input type="hidden" name="state" value="solved">
-    <button class="btn">{{ m.icon("circle-check") }} Close as solved</button></form>
-  <form method="post" action="/ui/incidents/{{ inc.id }}/close">{{ m.csrf_field() }}<input type="hidden" name="state" value="gave_up">
-    <button class="btn btn-danger">{{ m.icon("x") }} Close as gave up</button></form>
-  {% endif %}
-  {% if can_manual %}
-  <form method="post" action="/ui/incidents/{{ inc.id }}/manual">{{ m.csrf_field() }}
-    <button class="btn btn-primary">{{ m.icon("mouse-pointer-click") }} Solve manually</button></form>
-  {% endif %}
+<div class="crumbs">
+  <a href="/ui/incidents">Incidents</a>
+  <span>/</span>
+  <span>#{{ inc.id }}</span>
+</div>
+<header class="page-head">
+  <div>
+    <h1><span>#{{ inc.id }}</span> <span>{{ inc.domain }}</span> {{ m.badge(inc.state) }}</h1>
+  </div>
+  <div class="actions">
+    <form method="post" action="/ui/incidents/{{ inc.id }}/retry">{{ m.csrf_field() }}
+      <button class="btn btn-sm">{{ m.icon("refresh-cw") }} Heal again now</button></form>
+    {% if not closed %}
+    <form method="post" action="/ui/incidents/{{ inc.id }}/close">{{ m.csrf_field() }}<input type="hidden" name="state" value="solved">
+      <button class="btn btn-sm">{{ m.icon("circle-check") }} Close as solved</button></form>
+    <form method="post" action="/ui/incidents/{{ inc.id }}/close">{{ m.csrf_field() }}<input type="hidden" name="state" value="gave_up">
+      <button class="btn btn-sm btn-danger">{{ m.icon("x") }} Close as gave up</button></form>
+    {% endif %}
+    {% if can_manual %}
+    <form method="post" action="/ui/incidents/{{ inc.id }}/manual">{{ m.csrf_field() }}
+      <button class="btn btn-sm btn-primary">{{ m.icon("mouse-pointer-click") }} Solve manually</button></form>
+    {% endif %}
+    {% if closed %}
+    <form method="post" action="/ui/incidents/{{ inc.id }}/delete" onsubmit="return confirm('Permanently delete this incident?')">{{ m.csrf_field() }}<button class="btn btn-sm btn-ghost btn-danger">{{ m.icon("trash-2") }} Delete incident</button></form>
+    {% endif %}
+  </div>
+</header>
+
+<div class="card" style="margin-bottom: 24px;">
+  <dl class="kv">
+    <dt>URL</dt><dd>{% if inc.url %}<code>{{ inc.url }}</code> <a href="{{ inc.url }}" rel="noreferrer noopener" target="_blank" title="Open target">{{ m.icon("external-link") }}</a>{% else %}<span class="muted">—</span>{% endif %}</dd>
+    <dt>Kind</dt><dd><code>{{ inc.kind }}</code></dd>
+    <dt>Tier</dt><dd>{{ inc.tier }}</dd>
+    <dt>Heal window</dt><dd>{{ inc.heal_window + 1 }}</dd>
+    <dt>Failures</dt><dd>{{ inc.failures }}</dd>
+    <dt>Attempts</dt><dd>{{ inc.attempts }}</dd>
+    <dt>Opened</dt><dd>{{ inc.opened|ts }} <span class="muted">({{ inc.opened|ago }})</span></dd>
+    <dt>Updated</dt><dd>{{ inc.updated|ts }} <span class="muted">({{ inc.updated|ago }})</span></dd>
+    <dt>Closed</dt><dd>{% if inc.closed %}{{ inc.closed|ts }}{% else %}<span class="muted">—</span>{% endif %}</dd>
+    <dt>Next attempt</dt><dd>{{ inc.next_attempt_at|ago }}</dd>
+    <dt>Reason</dt><dd>{{ inc.reason or "—" }}</dd>
+    <dt>Note</dt><dd>{{ inc.note or "—" }}</dd>
+    <dt>Plugin</dt><dd>{% if plugin_scope %}<a class="mono" href="/ui/plugins/{{ plugin_scope|urlencode }}">{{ inc.plugin }}</a>{% else %}<code>{{ inc.plugin }}</code>{% endif %}</dd>
+  </dl>
 </div>
 
-<h2>Failure trace</h2>
-{% if trace %}{% include "_trace.html" %}{% else %}<p class="muted">No trace saved.</p>{% endif %}
+<section class="section">
+  <div class="section-head"><h2>Failure trace</h2></div>
+  {% if trace %}{% include "_trace.html" %}{% else %}{{ m.empty("No trace saved.", "image") }}{% endif %}
+</section>
 
-<h2>Heal attempts</h2>
-{% for a in attempts %}
-<details class="round"{% if a.prompt_ref or a.response_ref %} hx-get="/ui/incidents/{{ inc.id }}/attempts/{{ a.id }}/transcript" hx-trigger="toggle once" hx-target="find .transcript" hx-swap="innerHTML"{% endif %}>
-  <summary>#{{ loop.revindex }} · tier {{ a.tier }}{% if a.tier == 1 %} · window {{ a.heal_window + 1 }} round {{ a.round + 1 }} · {{ a.profile }} ({{ a.model }}){% endif %} {{ m.badge(a.result) }} {{ "%.1f"|format(a.elapsed_s) }}s · {{ a.at|ago }}</summary>
-  {% if a.detail %}<pre class="code">{{ a.detail }}</pre>{% endif %}
-  {% if a.version %}<p>Candidate: <a href="/ui/plugins/{{ a.scope|urlencode }}/v{{ a.version }}">{{ a.scope }}@v{{ a.version }}</a></p>{% endif %}
-  {% if a.trace_id %}<p>Replay trace: <a href="/ui/traces/{{ a.trace_id }}">{{ a.trace_id }}</a></p>{% endif %}
-  {% if a.prompt_ref or a.response_ref %}<div class="transcript muted">Loading…</div>{% endif %}
-</details>
-{% else %}
-<p class="muted">No heal attempts yet.</p>
-{% endfor %}
+<section class="section">
+  <div class="section-head"><h2>Heal attempts</h2></div>
+  {% for a in attempts %}
+  <details class="round"{% if a.prompt_ref or a.response_ref %} hx-get="/ui/incidents/{{ inc.id }}/attempts/{{ a.id }}/transcript" hx-trigger="toggle once" hx-target="find .transcript" hx-swap="innerHTML"{% endif %}>
+    <summary>
+      <span>#{{ loop.revindex }} · tier {{ a.tier }}{% if a.tier == 1 %} · window {{ a.heal_window + 1 }} round {{ a.round + 1 }} · {{ a.profile }} ({{ a.model }}){% endif %}</span>
+      <span class="muted" style="margin-left: 8px;">{{ "%.1f"|format(a.elapsed_s) }}s · {{ a.at|ago }}</span>
+      {{ m.badge(a.result) }}
+    </summary>
+    {% if a.detail %}<pre class="code">{{ a.detail }}</pre>{% endif %}
+    {% if a.version %}<p style="margin-top: 8px;">Candidate: <a class="mono" href="/ui/plugins/{{ a.scope|urlencode }}/v{{ a.version }}">{{ a.scope }}@v{{ a.version }}</a></p>{% endif %}
+    {% if a.trace_id %}<p style="margin-top: 8px;">Replay trace: <a class="mono" href="/ui/traces/{{ a.trace_id }}">{{ a.trace_id }}</a></p>{% endif %}
+    {% if a.prompt_ref or a.response_ref %}<div class="transcript muted">Loading…</div>{% endif %}
+  </details>
+  {% else %}
+  {{ m.empty("No heal attempts yet.", "refresh-cw") }}
+  {% endfor %}
+</section>
 {% endblock %}

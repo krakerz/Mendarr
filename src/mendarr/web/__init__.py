@@ -37,7 +37,43 @@ def _pct(ok: int, fail: int) -> str:
     return f"{ok * 100 // n}%" if n else "—"
 
 
-templates.env.filters.update(ts=_ts, ago=_ago)
+def _short_ua(ua: str | None) -> str:
+    if not ua:
+        return "—"
+    browser = ""
+    if "Firefox/" in ua:
+        ver = ua.split("Firefox/")[-1].split()[0]
+        browser = f"Firefox {ver}"
+    elif "Chrome/" in ua or "CriOS/" in ua:
+        ver = (ua.split("Chrome/")[-1] if "Chrome/" in ua else ua.split("CriOS/")[-1]).split()[0]
+        browser = f"Chrome {ver}"
+    elif "Safari/" in ua and "Version/" in ua:
+        ver = ua.split("Version/")[-1].split()[0]
+        browser = f"Safari {ver}"
+    elif "Edge/" in ua or "Edg/" in ua:
+        ver = (ua.split("Edg/")[-1] if "Edg/" in ua else ua.split("Edge/")[-1]).split()[0]
+        browser = f"Edge {ver}"
+    else:
+        browser = ua[:24]
+
+    os_name = ""
+    if "Windows" in ua:
+        os_name = "Win"
+    elif "Macintosh" in ua or "Mac OS" in ua:
+        os_name = "macOS"
+    elif "Linux" in ua:
+        os_name = "Linux"
+    elif "Android" in ua:
+        os_name = "Android"
+    elif "iPhone" in ua or "iPad" in ua:
+        os_name = "iOS"
+
+    if browser and os_name:
+        return f"{browser} ({os_name})"
+    return browser or ua[:24]
+
+
+templates.env.filters.update(ts=_ts, ago=_ago, short_ua=_short_ua)
 templates.env.globals.update(version=__version__, pct=_pct)
 
 
