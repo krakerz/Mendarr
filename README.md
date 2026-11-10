@@ -80,18 +80,39 @@ docker compose up -d
 
 Settings can be passed as environment variables or managed in `mendarr.yml` stored in `/data`:
 
+### Primary Settings
+
 | Environment Variable | Default | Description |
 |---|---|---|
 | `MENDARR_HOST` | `0.0.0.0` | API bind address |
 | `MENDARR_PORT` | `8191` | API listening port |
+| `MENDARR_DATA_DIR` | `/data` | Directory for database, plugins, and trace storage |
+| `MENDARR_LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warning`, `error`) |
 | `MENDARR_WORKER_URL` | `http://127.0.0.1:8192` | URL of the browser worker service |
-| `MENDARR_WORKER_TOKEN` | empty | Shared secret between API and worker |
+| `MENDARR_WORKER_TOKEN` | empty | Shared bearer token between API and worker container |
+| `MENDARR_SLOTS` | `2` | Number of concurrent browser slots on the worker |
 | `MENDARR_UI_USER` | `admin` | Dashboard username (login disabled if empty) |
 | `MENDARR_UI_PASSWORD` | empty | Dashboard password |
-| `MENDARR_COOKIE_CACHE` | `true` | Enable in-memory clearance cookie cache |
-| `MENDARR_COOKIE_MAX_TTL_HOURS` | `6` | Maximum age of cached cookies in hours |
+| `MENDARR_PUBLIC_URL` | empty | Public base URL (e.g. `http://mendarr.lan:8191`) for links in alerts |
+| `MENDARR_COOKIE_CACHE` | `true` | Enable fast-path clearance cookie caching |
+| `MENDARR_COOKIE_MAX_TTL_HOURS` | `6` | Maximum lifespan of cached clearance cookies in hours |
 | `MENDARR_PROXY_URL` | empty | Upstream proxy URL (`http://`, `https://`, `socks5://`) |
+| `MENDARR_PROXY_USERNAME` | empty | Username for upstream proxy (alternative to URL embedding) |
+| `MENDARR_PROXY_PASSWORD` | empty | Password for upstream proxy |
 | `MENDARR_GEOIP` | `true` | Match Camoufox timezone & locale to egress IP |
+
+### Advanced & Integrations
+
+| Environment Variable | Default | Description |
+|---|---|---|
+| `MENDARR_MCP_TOKEN` | empty | Bearer token to enable `/mcp` Model Context Protocol endpoint |
+| `MENDARR_MCP_REPLAYS_PER_HOUR` | `30` | Rate limit for MCP plugin validation replays (`0` = unlimited) |
+| `MENDARR_HEALER_ENABLED` | `true` | Enable background LLM solver healing loop |
+| `MENDARR_ROLLBACK_ENABLED` | `true` | Automatically rollback domain plugins if success rate drops |
+| `MENDARR_ROLLBACK_THRESHOLD` | `0.5` | Success rate threshold (0.0–1.0) triggering auto-rollback |
+| `MENDARR_COOKIE_CHECK` | `curl` | Clearance pre-check method (`curl` impersonate or `browser`) |
+| `MENDARR_UI_SECRET` | auto | Secret key for session cookie signing (stored in `<data_dir>/ui_secret`) |
+| `MENDARR_UI_SESSION_HOURS` | `168.0` | Dashboard session duration in hours (default 7 days) |
 
 ### Notifications & LLM (`mendarr.yml`)
 

@@ -93,8 +93,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-api.outputs.tags }}
           labels: ${{ steps.meta-api.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=api
+          cache-to: type=gha,mode=max,scope=api
 
       - name: Docker metadata for Browser Worker image
         id: meta-browser
@@ -113,8 +113,8 @@ jobs:
           push: true
           tags: ${{ steps.meta-browser.outputs.tags }}
           labels: ${{ steps.meta-browser.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=browser
+          cache-to: type=gha,mode=max,scope=browser
 
       - name: Extract changelog section
         id: changelog
