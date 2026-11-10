@@ -178,3 +178,66 @@ def test_not_writable_dir(tmp_path):
     s.close()
     with pytest.raises(StoreError):
         PluginStore.open(f, strict=True)
+
+
+def test_delete_scope(store, tmp_path):
+    with pytest.raises(StoreError, match="cannot delete _default scope"):
+        store.delete_scope("_default")
+
+    store.submit("x.org", SRC)
+    store.submit("x.org", SRC2)
+    store.record("x.org", 1, True)
+    assert (tmp_path / "plugins" / "x.org").is_dir()
+    assert (tmp_path / "plugins" / "x.org" / "v1.py").is_file()
+
+    deleted = store.delete_scope("X.ORG")
+    assert deleted == 2
+    assert store.list("x.org") == []
+    assert store._conn.execute("SELECT COUNT(*) FROM plugin_runs WHERE scope='x.org'").fetchone()[0] == 0
+    assert not (tmp_path / "plugins" / "x.org").exists()
+
+
+def test_delete_version(store, tmp_path):
+    with pytest.raises(StoreError, match="cannot delete builtin _default@v1"):
+        store.delete_version("_default", 1)
+
+    _two(store)  # x.org v1 (retired), v2 (active)
+    with pytest.raises(StoreError, match="cannot delete active plugin"):
+        store.delete_version("x.org", 2)
+
+    v1_file = tmp_path / "plugins" / "x.org" / "v1.py"
+    assert v1_file.is_file()
+
+    store.delete_version("x.org", 1)
+    assert [p.version for p in store.list("x.org")] == [2]
+    assert not v1_file.exists()
+
+    with pytest.raises(StoreError, match="unknown plugin"):
+        store.delete_version("x.org", 99)
+
+
+def test_clear_closed_incidents_and_delete_incident(store):
+    i1 = store.note_failure("a.com", kind="cf_loop", url="http://a.com", trace_id="", plugin="_default@v1")
+    i2 = store.note_failure("b.com", kind="cf_loop", url="http://b.com", trace_id="", plugin="_default@v1")
+    i3 = store.note_failure("c.com", kind="cf_loop", url="http://c.com", trace_id="", plugin="_default@v1")
+    store.add_attempt(i1, tier=1, result="retry_failed")
+    store.add_attempt(i2, tier=1, result="passed")
+    store.add_attempt(i3, tier=1, result="guard")
+
+    store.update_incident(i1, state="solved")
+    store.update_incident(i2, state="gave_up")
+    store.update_incident(i3, state="open")
+
+    cleared = store.clear_closed_incidents()
+    assert cleared == 2
+    assert store.incident(i1) is None
+    assert store.incident(i2) is None
+    assert store.attempts(i1) == []
+    assert store.attempts(i2) == []
+
+    assert store.incident(i3) is not None
+    assert len(store.attempts(i3)) == 1
+
+    store.delete_incident(i3)
+    assert store.incident(i3) is None
+    assert store.attempts(i3) == []

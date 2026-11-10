@@ -28,16 +28,21 @@
   {% if rows %}
   <div class="table-wrap">
     <table class="data">
-      <thead><tr><th>Scope</th><th>Active version</th><th class="num">Versions</th><th class="num">Candidates</th><th>Success rate</th><th>Newest</th></tr></thead>
+      <thead><tr><th>Scope</th><th>Active version</th><th class="num">Versions</th><th class="num">Candidates</th><th>Success rate</th><th>Newest</th><th class="actions-cell"></th></tr></thead>
       <tbody>
-      {% for r in rows %}
+      {% for row in rows %}
       <tr>
-        <td class="cell-main"><a class="mono" href="/ui/plugins/{{ r.scope|urlencode }}">{{ r.scope }}</a></td>
-        <td>{% if r.active %}<code>{{ r.active.ref }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
-        <td class="num">{{ r.versions }}</td>
-        <td class="num">{% if r.candidates %}{{ m.badge("candidate") }} {{ r.candidates }}{% else %}<span class="muted">0</span>{% endif %}</td>
-        <td>{% if r.active %}<span class="tnum">{{ pct(r.active.ok, r.active.fail) }}</span> <span class="muted">({{ r.active.ok }}/{{ r.active.fail }})</span>{% else %}<span class="muted">—</span>{% endif %}</td>
-        <td class="nowrap">{{ r.newest|ago }}</td>
+        <td class="cell-main"><a class="mono" href="/ui/plugins/{{ row.scope|urlencode }}">{{ row.scope }}</a></td>
+        <td>{% if row.active %}<code>{{ row.active.ref }}</code>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="num">{{ row.versions }}</td>
+        <td class="num">{% if row.candidates %}{{ m.badge("candidate") }} {{ row.candidates }}{% else %}<span class="muted">0</span>{% endif %}</td>
+        <td>{% if row.active %}<span class="tnum">{{ pct(row.active.ok, row.active.fail) }}</span> <span class="muted">({{ row.active.ok }}/{{ row.active.fail }})</span>{% else %}<span class="muted">—</span>{% endif %}</td>
+        <td class="nowrap">{{ row.newest|ago }}</td>
+        <td class="actions-cell">
+          {% if row.scope != '_default' %}
+          <form method="post" action="/ui/plugins/{{ row.scope }}/delete" onsubmit="return confirm('Delete entire plugin scope {{ row.scope|e }}?')">{{ m.csrf_field() }}<button class="btn btn-sm btn-ghost btn-danger" title="Delete scope">{{ m.icon("trash-2") }}</button></form>
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
       </tbody>

@@ -7,6 +7,11 @@
     <h1>Incidents</h1>
     <p class="page-sub">Challenge failures, automated healing attempts, and manual escalations.</p>
   </div>
+  {% if rows and (rows|selectattr("state", "in", ["solved", "gave_up"])|list) %}
+  <div class="actions">
+    <form method="post" action="/ui/incidents/clear" onsubmit="return confirm('Clear all solved and closed incidents?')">{{ m.csrf_field() }}<button class="btn btn-sm btn-ghost btn-danger">{{ m.icon("trash-2") }} Clear closed</button></form>
+  </div>
+  {% endif %}
 </header>
 <nav class="tabs">
   {% for key, label in tabs %}<a class="{% if key == state %}active{% endif %}" href="/ui/incidents?state={{ key }}">{{ label }}</a>{% endfor %}
@@ -15,21 +20,30 @@
 {% if rows %}
 <div class="table-wrap">
   <table class="data">
-    <thead><tr><th>#</th><th>Domain</th><th>State</th><th class="num">Tier</th><th>Kind</th><th>Opened</th><th>Updated</th><th>Next attempt</th><th class="num">Attempts</th><th>Note / reason</th></tr></thead>
+    <thead><tr>
+      <th style="width: 50px;">#</th>
+      <th style="min-width: 130px;">Domain</th>
+      <th style="width: 90px;">State</th>
+      <th style="min-width: 120px;">Kind</th>
+      <th>Activity</th>
+      <th>Next attempt</th>
+      <th class="num">Attempts</th>
+      <th>Note / Reason</th>
+      <th class="actions-cell"></th>
+    </tr></thead>
     <tbody>
     {% for i in rows %}
     {% set text = i.note or i.reason or "" %}
     <tr>
-      <td><a class="mono" href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td>
-      <td class="cell-main">{{ i.domain }}</td>
+      <td style="width: 50px;"><a class="mono" href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a></td>
+      <td class="cell-main mono">{{ i.domain }}</td>
       <td>{{ m.badge(i.state) }}</td>
-      <td class="num">{{ i.tier }}</td>
-      <td><code>{{ i.kind }}</code></td>
-      <td class="nowrap">{{ i.opened|ago }}</td>
-      <td class="nowrap">{{ i.updated|ago }}</td>
-      <td class="nowrap">{{ i.next_attempt_at|ago }}</td>
+      <td class="nowrap"><span class="badge mono" style="font-size: 0.72rem;">{{ i.kind }}</span></td>
+      <td class="nowrap"><div style="display: flex; flex-direction: column; gap: 2px;"><span>{{ i.opened|ago }}</span><span class="muted" style="font-size: 0.75rem;">updated {{ i.updated|ago }}</span></div></td>
+      <td class="nowrap muted" style="font-size: 0.8125rem;">{{ i.next_attempt_at|ago }}</td>
       <td class="num">{{ i.attempts }}</td>
-      <td title="{{ text }}"><span class="truncate">{{ text }}</span></td>
+      <td title="{{ text }}"><span class="truncate" style="max-width: 320px;">{{ text }}</span></td>
+      <td class="actions-cell"><a class="btn btn-sm btn-ghost" href="/ui/incidents/{{ i.id }}">View</a></td>
     </tr>
     {% endfor %}
     </tbody>

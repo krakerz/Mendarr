@@ -1,4 +1,5 @@
 import base64
+from urllib.parse import unquote
 
 from fakeworker import snapshot
 
@@ -78,3 +79,41 @@ def test_transcript(ui_client, tmp_path):
 
 def test_unauthenticated(client):
     assert client.get("/ui/incidents", follow_redirects=False).status_code == 303
+
+
+def test_clear_closed_and_delete_incident(ui_client):
+    iid, _ = _seed(ui_client)
+    store = ui_client.app.state.store
+
+    # Initially open - clear button not visible
+    page = ui_client.get("/ui/incidents?state=all").text
+    assert "/ui/incidents/clear" not in page
+
+    # Close incident
+    ui_client.post(f"/ui/incidents/{iid}/close", data={"csrf": ui_client.csrf, "state": "solved"})
+
+    # Clear button visible
+    page = ui_client.get("/ui/incidents?state=solved").text
+    assert "/ui/incidents/clear" in page
+
+    # Delete incident button visible on closed detail page
+    detail = ui_client.get(f"/ui/incidents/{iid}").text
+    assert f"/ui/incidents/{iid}/delete" in detail
+
+    # CSRF checks
+    assert ui_client.post("/ui/incidents/clear", follow_redirects=False).status_code == 403
+    assert ui_client.post(f"/ui/incidents/{iid}/delete", follow_redirects=False).status_code == 403
+
+    # Delete non-existent incident 404
+    assert ui_client.post("/ui/incidents/9999/delete", data={"csrf": ui_client.csrf}).status_code == 404
+
+    # Clear closed incidents
+    r = ui_client.post("/ui/incidents/clear", data={"csrf": ui_client.csrf}, follow_redirects=False)
+    assert r.status_code == 303 and "closed incident(s) cleared" in unquote(r.headers["location"])
+    assert store.incident(iid) is None
+
+    # Delete specific incident
+    iid2, _ = _seed(ui_client)
+    r = ui_client.post(f"/ui/incidents/{iid2}/delete", data={"csrf": ui_client.csrf}, follow_redirects=False)
+    assert r.status_code == 303 and f"Incident #{iid2} deleted" in unquote(r.headers["location"])
+    assert store.incident(iid2) is None

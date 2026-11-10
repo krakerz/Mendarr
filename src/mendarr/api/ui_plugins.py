@@ -216,6 +216,32 @@ def plugin_rollback(request: Request, scope: str) -> Response:
     return _back(s, "ok", f"Rolled back to {rec.ref}")
 
 
+@router.post("/plugins/{scope}/delete")
+def plugin_delete_scope(request: Request, scope: str) -> Response:
+    s = _scope_or_none(scope)
+    if s is None:
+        return _bad_scope(request, scope)
+    if s == DEFAULT_SCOPE:
+        return error_page(request, 400, "cannot delete _default scope")
+    try:
+        request.app.state.store.delete_scope(s)
+    except StoreError as e:
+        return RedirectResponse(f"/ui/plugins?err={quote(str(e))}", status_code=303)
+    return RedirectResponse(f"/ui/plugins?ok={quote(f'Deleted plugin scope {s}')}", status_code=303)
+
+
+@router.post("/plugins/{scope}/v{version:int}/delete")
+def plugin_delete_version(request: Request, scope: str, version: int) -> Response:
+    s = _scope_or_none(scope)
+    if s is None:
+        return _bad_scope(request, scope)
+    try:
+        request.app.state.store.delete_version(s, version)
+    except StoreError as e:
+        return _back(s, "err", str(e))
+    return _back(s, "ok", f"Deleted {s}@v{version}")
+
+
 @router.post("/plugins/{scope}/test")
 async def plugin_test(request: Request, scope: str, source: str = Form(), url: str = Form("")) -> Response:
     s = _scope_or_none(scope)

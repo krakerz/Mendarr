@@ -39,6 +39,8 @@ class FakeUp:
 
     async def __anext__(self):
         while not self.q:
+            if self.closed:
+                raise StopAsyncIteration
             await asyncio.sleep(0.01)
         return self.q.pop(0)
 

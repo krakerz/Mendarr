@@ -19,6 +19,9 @@
       <button class="btn btn-sm btn-danger">{{ m.icon("undo-2") }} Rollback active</button>
     </form>
     {% endif %}
+    {% if scope != '_default' %}
+    <form method="post" action="/ui/plugins/{{ scope }}/delete" onsubmit="return confirm('Delete entire plugin scope {{ scope|e }}?')">{{ m.csrf_field() }}<button class="btn btn-sm btn-ghost btn-danger">{{ m.icon("trash-2") }} Delete scope</button></form>
+    {% endif %}
   </div>
 </header>
 
@@ -43,17 +46,32 @@
     <table class="data">
       <thead><tr><th>Version</th><th>Status</th><th>Author</th><th>Backend</th><th>Created</th><th>Success rate</th><th>Parent</th><th>Notes</th><th class="actions-cell"></th></tr></thead>
       <tbody>
-      {% for rec in recs %}
+      {% for r in recs %}
       <tr>
-        <td class="cell-main"><a class="mono" href="/ui/plugins/{{ scope|urlencode }}/v{{ rec.version }}">v{{ rec.version }}</a></td>
-        <td>{{ m.badge(rec.status) }}</td>
-        <td><code>{{ rec.author }}</code></td>
-        <td><code>{{ rec.backend }}</code></td>
-        <td class="nowrap">{{ rec.created|ts }}</td>
-        <td><span class="tnum">{{ pct(rec.ok, rec.fail) }}</span> <span class="muted">({{ rec.ok }}/{{ rec.fail }})</span></td>
-        <td>{{ ("v" ~ rec.parent) if rec.parent else "<span class='muted'>—</span>"|safe }}</td>
-        <td title="{{ rec.notes }}"><span class="truncate">{{ rec.notes }}</span></td>
-        <td class="actions-cell">{% include "_plugin_actions.html" %}</td>
+        <td class="cell-main"><a class="mono" href="/ui/plugins/{{ scope|urlencode }}/v{{ r.version }}">v{{ r.version }}</a></td>
+        <td>{{ m.badge(r.status) }}</td>
+        <td><code>{{ r.author }}</code></td>
+        <td><code>{{ r.backend }}</code></td>
+        <td class="nowrap">{{ r.created|ts }}</td>
+        <td><span class="tnum">{{ pct(r.ok, r.fail) }}</span> <span class="muted">({{ r.ok }}/{{ r.fail }})</span></td>
+        <td>{{ ("v" ~ r.parent) if r.parent else "<span class='muted'>—</span>"|safe }}</td>
+        <td title="{{ r.notes }}"><span class="truncate">{{ r.notes }}</span></td>
+        <td class="actions-cell">
+          <span class="actions" style="justify-content: flex-end;">
+            {% if r.status in ("candidate", "retired") %}
+            <form method="post" action="/ui/plugins/{{ scope|urlencode }}/promote">{{ m.csrf_field() }}<input type="hidden" name="version" value="{{ r.version }}"><button class="btn btn-sm btn-ghost" style="color: var(--green);" title="Promote to active">{{ m.icon("circle-check") }} Promote</button></form>
+            {% endif %}
+            {% if r.status == "candidate" %}
+            <form method="post" action="/ui/plugins/{{ scope|urlencode }}/reject">{{ m.csrf_field() }}<input type="hidden" name="version" value="{{ r.version }}"><button class="btn btn-sm btn-ghost btn-danger" title="Reject candidate">{{ m.icon("trash-2") }} Reject</button></form>
+            {% endif %}
+            {% if r.status != 'active' %}
+            <form method="post" action="/ui/plugins/{{ scope }}/v{{ r.version }}/delete" onsubmit="return confirm('Delete {{ r.ref }}?')">{{ m.csrf_field() }}<button class="btn btn-sm btn-ghost btn-danger" title="Delete version">{{ m.icon("trash-2") }}</button></form>
+            {% endif %}
+            {% set base = r.parent if r.parent else (r.version - 1) %}
+            {% if base >= 1 and base != r.version %}<a class="btn btn-sm btn-ghost" href="/ui/plugins/{{ scope|urlencode }}/diff?a={{ base }}&amp;b={{ r.version }}" title="Diff vs v{{ base }}">{{ m.icon("git-compare") }} Diff</a>{% endif %}
+            <a class="btn btn-sm btn-ghost" href="/ui/plugins/{{ scope|urlencode }}/edit?from={{ r.version }}" title="Edit as new">{{ m.icon("pencil") }} Edit</a>
+          </span>
+        </td>
       </tr>
       {% endfor %}
       </tbody>

@@ -17,6 +17,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Interactive Studio / direct manual solve from the web UI with live noVNC browser view
 - Modernized web dashboard (`/ui`) with dark theme, persistent sidebar, incident traces (screenshots, DOM, network), and plugin editor
 - "Clear finished sessions" button in Manual Solve to keep active session lists clean
+- Delete plugins: delete an entire custom domain scope (falls back to `_default`) or delete specific inactive versions
+- "Clear closed incidents" bulk action button and single closed incident deletion
+- Redesigned Incidents and Cookies table layouts with streamlined activity timeline, browser badges, and tag formatting
 - Discord notifications with mention/ping support (`@here`, `@everyone`, or custom role mention)
 - Generic JSON webhook notifications with structured incident/healing payloads
 - Upstream HTTP and SOCKS5 proxy support for worker traffic with no direct fallback

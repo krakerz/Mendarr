@@ -24,6 +24,9 @@
     <form method="post" action="/ui/incidents/{{ inc.id }}/manual">{{ m.csrf_field() }}
       <button class="btn btn-sm btn-primary">{{ m.icon("mouse-pointer-click") }} Solve manually</button></form>
     {% endif %}
+    {% if closed %}
+    <form method="post" action="/ui/incidents/{{ inc.id }}/delete" onsubmit="return confirm('Permanently delete this incident?')">{{ m.csrf_field() }}<button class="btn btn-sm btn-ghost btn-danger">{{ m.icon("trash-2") }} Delete incident</button></form>
+    {% endif %}
   </div>
 </header>
 

@@ -6,6 +6,7 @@ import hashlib
 import logging
 import os
 import re
+import shutil
 import sqlite3
 import threading
 import time
@@ -364,6 +365,33 @@ class PluginStore:
                 ).fetchall()
             return [PluginRecord(*r) for r in rows]
 
+    def delete_scope(self, scope: str) -> int:
+        s = normalize_scope(scope)
+        if s == DEFAULT_SCOPE:
+            raise StoreError("cannot delete _default scope")
+        with self._lock:
+            cur = self._conn.execute("DELETE FROM plugins WHERE scope = ?", (s,))
+            count = cur.rowcount
+            self._conn.execute("DELETE FROM plugin_runs WHERE scope = ?", (s,))
+            self._conn.commit()
+            if self._plugins_dir is not None:
+                shutil.rmtree(self._plugins_dir / s, ignore_errors=True)
+            return count
+
+    def delete_version(self, scope: str, version: int) -> None:
+        s = normalize_scope(scope)
+        if s == DEFAULT_SCOPE and version == 1:
+            raise StoreError("cannot delete builtin _default@v1")
+        with self._lock:
+            rec = self._need(s, version)
+            if rec.status == "active":
+                raise StoreError(f"cannot delete active plugin {rec.ref}; roll back or promote another version first")
+            self._conn.execute("DELETE FROM plugins WHERE scope = ? AND version = ?", (s, version))
+            self._conn.execute("DELETE FROM plugin_runs WHERE scope = ? AND version = ?", (s, version))
+            self._conn.commit()
+            if self._plugins_dir is not None:
+                self._file(s, version).unlink(missing_ok=True)
+
     def resolve(self, domain: str) -> PluginRecord:
         d = domain.strip().lower()
         with self._lock:
@@ -432,6 +460,22 @@ class PluginStore:
         with self._lock:
             rows = _dicts(self._conn.execute("SELECT * FROM incidents WHERE id=?", (iid,)))
         return rows[0] if rows else None
+
+    def clear_closed_incidents(self) -> int:
+        with self._lock:
+            self._conn.execute(
+                "DELETE FROM attempts WHERE incident IN (SELECT id FROM incidents WHERE state IN ('solved', 'gave_up'))"
+            )
+            cur = self._conn.execute("DELETE FROM incidents WHERE state IN ('solved', 'gave_up')")
+            count = cur.rowcount
+            self._conn.commit()
+            return count
+
+    def delete_incident(self, iid: int) -> None:
+        with self._lock:
+            self._conn.execute("DELETE FROM attempts WHERE incident = ?", (iid,))
+            self._conn.execute("DELETE FROM incidents WHERE id = ?", (iid,))
+            self._conn.commit()
 
     # --- M3 incident lifecycle ---
 
@@ -583,6 +627,10 @@ class PluginStore:
                 "SELECT rounds FROM heal_days WHERE domain=? AND day=?", (domain, day)
             ).fetchone()[0]
 
+    def _file(self, scope: str, version: int) -> Path:
+        base = self._plugins_dir or Path()
+        return base / scope / f"v{version}.py"
+
     def _write_file(self, scope: str, version: int, source: str) -> None:
         if self._plugins_dir is None:
             return
@@ -591,7 +639,7 @@ class PluginStore:
             d.mkdir(parents=True, exist_ok=True)
             tmp = d / f"v{version}.py.tmp"
             tmp.write_text(source, encoding="utf-8")
-            os.replace(tmp, d / f"v{version}.py")
+            os.replace(tmp, self._file(scope, version))
         except OSError as e:
             log.warning("could not mirror %s@v%d to disk: %s", scope, version, e)
 
