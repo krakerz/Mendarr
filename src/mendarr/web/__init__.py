@@ -79,7 +79,28 @@ def _flag(code: str | None) -> str:
     return "".join(chr(127397 + ord(c)) for c in code.upper())
 
 
-templates.env.filters.update(ts=_ts, ago=_ago, short_ua=_short_ua, flag=_flag)
+COUNTRY_NAMES: dict[str, str] = {
+    "AU": "Australia", "AT": "Austria", "BE": "Belgium", "BR": "Brazil", "BG": "Bulgaria",
+    "CA": "Canada", "CH": "Switzerland", "CL": "Chile", "CN": "China", "CO": "Colombia",
+    "CZ": "Czech Republic", "DE": "Germany", "DK": "Denmark", "EE": "Estonia", "ES": "Spain",
+    "FI": "Finland", "FR": "France", "GB": "United Kingdom", "GR": "Greece", "HK": "Hong Kong",
+    "HR": "Croatia", "HU": "Hungary", "ID": "Indonesia", "IE": "Ireland", "IL": "Israel",
+    "IN": "India", "IS": "Iceland", "IT": "Italy", "JP": "Japan", "KR": "South Korea",
+    "LT": "Lithuania", "LU": "Luxembourg", "LV": "Latvia", "MD": "Moldova", "MX": "Mexico",
+    "MY": "Malaysia", "NL": "Netherlands", "NO": "Norway", "NZ": "New Zealand", "PL": "Poland",
+    "PT": "Portugal", "RO": "Romania", "RS": "Serbia", "RU": "Russia", "SE": "Sweden",
+    "SG": "Singapore", "SK": "Slovakia", "TH": "Thailand", "TR": "Turkey", "TW": "Taiwan",
+    "UA": "Ukraine", "US": "United States", "VN": "Vietnam", "ZA": "South Africa",
+}
+
+
+def _country_name(code: str | None) -> str:
+    if not code:
+        return ""
+    return COUNTRY_NAMES.get(code.upper(), code.upper())
+
+
+templates.env.filters.update(ts=_ts, ago=_ago, short_ua=_short_ua, flag=_flag, country_name=_country_name)
 templates.env.globals.update(version=__version__, pct=_pct)
 
 
