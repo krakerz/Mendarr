@@ -75,3 +75,12 @@ def test_solve_then_cookies_listed(session):
 def test_logout_ends_session(session):
     assert session.post("/ui/logout", data={"csrf": session.csrf}).status_code == 303
     assert session.get("/ui").status_code == 303
+
+
+def test_active_solves_endpoint(session):
+    r = session.get("/ui/active")
+    assert r.status_code == 200
+    assert 'id="active-solves"' in r.text
+    page = session.get("/ui").text
+    assert 'hx-get="/ui/active"' in page
+    assert "In progress" in page

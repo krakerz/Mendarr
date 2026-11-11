@@ -21,6 +21,7 @@ from mendarr.core.manual import ManualManager
 from mendarr.core.router import Router
 from mendarr.core.stats import DomainStats, StatsHooks
 from mendarr.core.traces import TraceStore
+from mendarr.core.tracker import SolveTracker
 from mendarr.healer.config import ConfigFile, config_path
 from mendarr.healer.loop import Healer
 from mendarr.healer.notify import Notifier
@@ -44,8 +45,11 @@ def create_app(
     stats = DomainStats.open(Path(settings.data_dir) / "store.db")
     traces = TraceStore.open(Path(settings.data_dir) / "traces")
     config_file = ConfigFile(config_path(settings))
-    router = Router(settings, worker, cache, store=store)
-    healer = Healer(settings, store, router, traces, config_file, notifier=Notifier(public_url=settings.public_url))
+    tracker = SolveTracker()
+    router = Router(settings, worker, cache, store=store, tracker=tracker)
+    healer = Healer(
+        settings, store, router, traces, config_file, notifier=Notifier(public_url=settings.public_url), tracker=tracker
+    )
     router.hooks = StatsHooks(stats, healer)
     manual = ManualManager(
         worker,
@@ -82,6 +86,7 @@ def create_app(
     app.state.traces = traces
     app.state.config_file = config_file
     app.state.stats = stats
+    app.state.tracker = tracker
     app.state.auth = Auth.from_settings(settings)
     app.state.user_agent = ""
     app.include_router(v1_router)

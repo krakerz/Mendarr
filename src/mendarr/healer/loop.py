@@ -13,6 +13,7 @@ from pathlib import Path
 from mendarr.config import Settings
 from mendarr.core.router import Router
 from mendarr.core.traces import FailureReport, TraceStore
+from mendarr.core.tracker import SolveTracker
 from mendarr.healer import prompt
 from mendarr.healer.config import ConfigFile, DomainPolicy, HealerConfig
 from mendarr.healer.llm import Endpoint, LlmClient, LlmUnavailable
@@ -53,6 +54,7 @@ class Healer:
         notifier: Notifier | None = None,
         clock: Callable[[], float] = time.time,
         heal_dir: Path | None = None,
+        tracker: SolveTracker | None = None,
     ) -> None:
         self._settings = settings
         self._store = store
@@ -63,6 +65,8 @@ class Healer:
         self._notifier = notifier or Notifier(public_url=settings.public_url)
         self._clock = clock
         self._heal_dir = heal_dir if heal_dir is not None else Path(settings.data_dir) / "heal"
+        self._tracker = tracker
+        self._active_tokens: dict[int, str] = {}
         self._wake: asyncio.Event | None = None
         self._task: asyncio.Task | None = None
         self._spawned: set[asyncio.Task] = set()
@@ -197,12 +201,25 @@ class Healer:
             self._store.update_incident(iid, state="gave_up", next_attempt_at=None, note="healing is off for this domain")
             return
         self._store.update_incident(iid, state="healing")
-        if inc["tier"] == 0:
-            if await self._auto_attempts(inc, pol, cfg):
-                return
-            self._store.update_incident(iid, tier=1)
-            inc = self._store.incident(iid) or inc
-        await self._heal_window(inc, pol, cfg)
+        token = (
+            self._tracker.start("healer", domain, inc["url"], description=f"incident #{iid}: auto attempts", incident_id=iid)
+            if self._tracker is not None
+            else None
+        )
+        if token:
+            self._active_tokens[iid] = token
+        try:
+            if inc["tier"] == 0:
+                if await self._auto_attempts(inc, pol, cfg):
+                    return
+                self._store.update_incident(iid, tier=1)
+                inc = self._store.incident(iid) or inc
+            await self._heal_window(inc, pol, cfg)
+        finally:
+            if token:
+                self._active_tokens.pop(iid, None)
+                if self._tracker is not None:
+                    self._tracker.finish(token)
 
     def _replay_ms(self, cfg: HealerConfig) -> int:
         return int(cfg.healer.replay_timeout_s * 1000)
@@ -220,6 +237,8 @@ class Healer:
                     continue
                 spec = PluginSpec(scope=domain, version=0, source=src, sha256=sha256(src.encode()).hexdigest())
                 label = "switch"
+            if self._tracker is not None and iid in self._active_tokens:
+                self._tracker.update(self._active_tokens[iid], f"incident #{iid}: auto attempt ({label})")
             out = await self._router.replay(inc["url"], spec, max_timeout_ms=self._replay_ms(cfg))
             trace_id = ""
             if not out.ok:
@@ -330,6 +349,8 @@ class Healer:
         )
         n = len(all_attempts) + 1
         common = {"tier": 1, "heal_window": inc["heal_window"], "round": rnd, "profile": ep.name, "model": ep.model}
+        if self._tracker is not None and iid in self._active_tokens:
+            self._tracker.update(self._active_tokens[iid], f"incident #{iid}: round {rnd} via {ep.profile}")
         try:
             reply = await self._llm.complete(ep, messages)
         except LlmUnavailable as e:
@@ -349,6 +370,8 @@ class Healer:
         except GuardError as e:
             self._store.add_attempt(iid, result="guard", detail=str(e), **refs)
             return "failed"
+        if self._tracker is not None and iid in self._active_tokens:
+            self._tracker.update(self._active_tokens[iid], f"incident #{iid}: replaying candidate round {rnd}")
         out = await self._router.replay(inc["url"], rec.spec(), max_timeout_ms=self._replay_ms(cfg))
         if out.failure == "network":
             self._store.add_attempt(
