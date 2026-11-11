@@ -15,7 +15,9 @@
     <p class="page-sub" style="margin-top: 4px;">Solve the challenge in the live view below. Mendarr detects success and captures cookies automatically.</p>
   </div>
   {% if s.active %}
-  <div class="actions">
+  <div class="actions" style="display: flex; gap: 8px;">
+    <form method="post" action="/ui/manual/{{ s.id }}/finish">{{ m.csrf_field() }}
+      <button class="btn btn-sm btn-primary">{{ m.icon("check") }} Finish &amp; Capture</button></form>
     <form method="post" action="/ui/manual/{{ s.id }}/cancel">{{ m.csrf_field() }}
       <button class="btn btn-sm btn-danger">{{ m.icon("x") }} Cancel session</button></form>
   </div>

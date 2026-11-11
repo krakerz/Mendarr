@@ -202,6 +202,9 @@ def create_app(
             await ws.close(code=1011)
             return
         await ws.accept(subprotocol="binary" if "binary" in ws.scope.get("subprotocols", []) else None)
+        ev = getattr(session, "vnc_connected", None)
+        if ev is not None:
+            ev.set()
         await bridge(ws, reader, writer, session.ended)
 
     return app

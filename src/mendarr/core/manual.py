@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from mendarr.api.worker_client import WorkerClient, WorkerRejected, WorkerUnavailable
 from mendarr.core.cookies import CookieCache
 from mendarr.core.domains import registrable_domain
-from mendarr.core.judge import judge
+from mendarr.core.judge import is_challenge, judge
 from mendarr.core.traces import TraceStore
 from mendarr.plugins.store import OPEN_INCIDENTS, PluginStore
 from mendarr.rpc import ManualResult, ManualStart, Snapshot, SolveResult
@@ -51,6 +51,7 @@ class ManualSession:
     events: int = 0
     trace_id: str = ""
     ended: float | None = None
+    challenge_seen: bool = False
     task: asyncio.Task | None = field(default=None, repr=False)
     backend: str = "camoufox"
 
@@ -179,6 +180,15 @@ class ManualManager:
     def active_for_slot(self, slot: int) -> ManualSession | None:
         return next((s for s in self._sessions.values() if s.active and s.slot == slot), None)
 
+    async def finish(self, sid: str) -> bool:
+        s = self._sessions.get(sid)
+        if s is None or not s.active:
+            return False
+        await self._stop_task(s)
+        if s.active:
+            await self._succeed(s, None)
+        return True
+
     async def cancel(self, sid: str) -> bool:
         s = self._sessions.get(sid)
         if s is None or not s.active:
@@ -263,10 +273,25 @@ class ManualManager:
                 if st.status == "closed":
                     await self._end(s, "cancelled", "browser tab closed")
                     return
-                ok_streak = ok_streak + 1 if self._clear(s, st.snapshot, st.challenge_seen) else 0
-                if ok_streak and (st.challenge_seen or ok_streak >= 2):
+                is_chal = st.challenge_seen or (
+                    st.snapshot is not None
+                    and is_challenge(st.snapshot.headers, st.snapshot.title, st.snapshot.html)
+                )
+                if is_chal:
+                    s.challenge_seen = True
+
+                is_clear = self._clear(s, st.snapshot, s.challenge_seen)
+                ok_streak = ok_streak + 1 if is_clear else 0
+
+                # Auto-solve only if a challenge was actually detected and cleared for 2 consecutive polls
+                if s.challenge_seen and ok_streak >= 2:
                     await self._succeed(s, st.snapshot)
                     return
+
+                if s.challenge_seen:
+                    s.detail = "challenge detected — solve it in the live view"
+                elif ok_streak:
+                    s.detail = "page loaded — interact in live view or click Finish & Capture"
         except asyncio.CancelledError:
             raise
         except Exception:
@@ -288,7 +313,9 @@ class ManualManager:
         except Exception as e:
             log.warning("manual finish for %s failed (%s); using the last polled state", s.id, e)
             res = ManualResult(snapshot=last_snap)
-        snap = res.snapshot if self._clear(s, res.snapshot, res.challenge_seen) else last_snap
+        snap = res.snapshot if self._clear(s, res.snapshot, res.challenge_seen or s.challenge_seen) else last_snap
+        if snap is None:
+            snap = res.snapshot
         if snap is None:  # not reachable: _watch only gets here after a clear poll
             self._fail(s, "no page state to cache")
             return
