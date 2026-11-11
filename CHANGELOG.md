@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.3] — 2026-11-11
+
+### Fixed
+- Fixed 2–3 minute VNC connection stall on remote Docker hosts by disabling dual-stack IPv6 sockets and reverse DNS PTR lookups in `x11vnc`.
+
 ## [0.5.2] — 2026-11-11
 
 ### Changed
