@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.7] — 2026-11-11
+
+### Fixed
+- Fixed the live view taking minutes to connect (and x11vnc burning CPU while idle) on Docker hosts with a huge open-file limit (`LimitNOFILE=infinity`): x11vnc now runs with `ulimit -n 1024`, and `docker/compose.example.yml` sets `ulimits: nofile: 65536` for the browser container.
+
+### Changed
+- x11vnc runs with its defaults again (`-noxdamage -noxfixes -noxrecord` removed): those flags were added for the slow connect, whose real cause was the open-file limit.
+
 ## [0.5.6] — 2026-11-11
 
 ### Added

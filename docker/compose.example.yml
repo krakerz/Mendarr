@@ -6,6 +6,9 @@ services:
       dockerfile: docker/Dockerfile.browser
     shm_size: 1gb
     init: true
+    # some Docker hosts hand containers a ~1e9 open-file limit, which makes x11vnc and other fd-walking tools crawl
+    ulimits:
+      nofile: 65536
     environment:
       - MENDARR_SLOTS=2
       - MENDARR_WORKER_TOKEN=${MENDARR_WORKER_TOKEN:?set a long random MENDARR_WORKER_TOKEN in .env}

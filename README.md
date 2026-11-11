@@ -16,7 +16,7 @@ Mendarr is a drop-in replacement for FlareSolverr designed to reliably bypass Cl
   - `obscura`: High-performance headless stealth engine.
 - **Automated LLM Healing**: Failed challenge requests automatically open incidents. A local OpenAI-compatible LLM (e.g., LM Studio, vLLM, Ollama) inspects traces (screenshots, DOM, network calls) and writes a repaired solver script verified against replay gates before promotion.
 - **Per-Domain Plugin Scoping**: New or repaired solver scripts are scoped to that domain only; the active default solver is never broken or overwritten.
-- **Interactive Manual Solve Studio**: View and solve challenges in real-time inside the web dashboard via an authenticated noVNC live browser stream.
+- **Interactive Manual Solve Studio**: Opens the site in the chosen browser backend and streams it to the web dashboard over an authenticated noVNC live view. You solve it by hand while Mendarr records your actions as a demonstration for the healer; nothing is captured until you click **Finish & Capture**. **Attempt auto solve** runs the domain's solver plugin on the open page while you watch.
 - **Strict Upstream Proxy Support**: Route all worker browser and egress traffic through HTTP/SOCKS5 proxies or VPNs with strict kill-switch behavior (no direct leak fallback).
 - **Rich Notifications**: Discord alerts with mention support (`@here`, `@everyone`, role IDs) and structured generic JSON webhooks.
 - **External Agent Support (MCP)**: Native Model Context Protocol endpoint (`/mcp`) for external agent inspection and repair.
@@ -37,6 +37,8 @@ services:
     image: ghcr.io/krakerz/mendarr-browser:latest
     shm_size: 1gb
     init: true
+    ulimits:
+      nofile: 65536
     environment:
       - MENDARR_SLOTS=2
       - MENDARR_WORKER_TOKEN=${MENDARR_WORKER_TOKEN:-generate_a_random_token}
@@ -77,6 +79,8 @@ docker compose up -d
 
 - **FlareSolverr API**: `http://localhost:8191/v1`
 - **Web Dashboard**: `http://localhost:8191/ui` (Default: `admin` / `admin`)
+
+> **Note on open-file limits**: some Docker hosts (`LimitNOFILE=infinity` in the Docker service) give containers an open-file limit of about a billion, which makes x11vnc and other tools that walk every file descriptor crawl. The worker caps x11vnc itself; `ulimits: nofile: 65536` above covers the rest of the browser container. Check with `docker exec <browser container> sh -c 'ulimit -n'`.
 
 > **Note on Reverse Proxies**: If serving Mendarr behind Nginx, Caddy, Traefik, or NPM, enable WebSocket upgrades (`Upgrade` and `Connection` headers) on `/ui/vnc/` for the interactive Manual Solve studio.
 
