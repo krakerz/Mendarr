@@ -63,6 +63,26 @@
 </main>
 {% endif %}
 {% endblock %}
-{% block scripts %}{% endblock %}
+{% block scripts %}
+<script>
+  // The dashboard egress card is refreshed through htmx (GET /ui/egress), but htmx 2.0 does
+  // not swap `hx-trigger="load"` responses for elements present on first paint, so the card
+  // stayed blank ("… looking up") until the page was interacted with. Load it explicitly when
+  // the page first renders (`htmx:load` on <body>) and again whenever the overview is
+  // re-rendered (`htmx:load` on #overview, every 15 s) so the card never reads "looking up".
+  // The card element is re-queried each time because the overview replaces it via outerHTML.
+  document.addEventListener("htmx:load", function (e) {
+    var elt = e.target;
+    if (elt !== document.body && elt.id !== "overview") {
+      return;
+    }
+    var card = document.querySelector(".stat-egress");
+    if (card && card.getAttribute("hx-get")) {
+      htmx.ajax("get", card.getAttribute("hx-get"),
+        {target: card, swap: card.getAttribute("hx-swap") || "innerHTML"});
+    }
+  });
+</script>
+{% endblock %}
 </body>
 </html>
