@@ -20,6 +20,10 @@ services:
     # plugin code runs here: no data volume, no secrets besides the worker token, no privileges
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+      - net.ipv6.conf.lo.disable_ipv6=1
     restart: unless-stopped
 
   mendarr:
