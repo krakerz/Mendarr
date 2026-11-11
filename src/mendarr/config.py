@@ -33,6 +33,8 @@ class Settings(BaseSettings):
     curl_impersonate: str = "firefox"
     egress_check_url: str = "https://api.ipify.org?format=json"
     egress_ttl_seconds: float = 60.0
+    # country lookup for the exit IP ({ip} is substituted); empty = no country lookup
+    egress_country_url: str = "https://api.country.is/{ip}"
     geoip: bool = True
     click_backend: Literal["auto", "xdotool", "mouse"] = "auto"
 

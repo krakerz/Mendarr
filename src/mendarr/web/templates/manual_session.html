@@ -12,10 +12,12 @@
 <header class="page-head">
   <div>
     <h1>Manual solve — {{ s.domain }}</h1>
-    <p class="page-sub" style="margin-top: 4px;">Solve the challenge in the live view below. Mendarr detects success and captures cookies automatically.</p>
+    <p class="page-sub" style="margin-top: 4px;">Drive the page in the live view below, or let Mendarr try its solver on it. Nothing is captured until you click Finish &amp; Capture.</p>
   </div>
   {% if s.active %}
   <div class="actions" style="display: flex; gap: 8px;">
+    <form method="post" action="/ui/manual/{{ s.id }}/autosolve">{{ m.csrf_field() }}
+      <button class="btn btn-sm" {% if s.autosolving %}disabled{% endif %}>{{ m.icon("play") }} Attempt auto solve</button></form>
     <form method="post" action="/ui/manual/{{ s.id }}/finish">{{ m.csrf_field() }}
       <button class="btn btn-sm btn-primary">{{ m.icon("check") }} Finish &amp; Capture</button></form>
     <form method="post" action="/ui/manual/{{ s.id }}/cancel">{{ m.csrf_field() }}

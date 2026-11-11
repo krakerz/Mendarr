@@ -13,7 +13,7 @@ ICONS = [
     "layout-dashboard", "siren", "puzzle", "cookie", "mouse-pointer-click", "settings", "log-out", "log-in",
     "shield-check", "circle-check", "circle-x", "clock", "rotate-ccw", "circle-arrow-up", "undo-2", "ban",
     "git-compare", "play", "send", "save", "trash-2", "refresh-cw", "wifi", "wifi-off", "image", "file-code",
-    "network", "chevron-down", "external-link", "triangle-alert", "plus", "x", "bell", "pencil", "eye",
+    "network", "chevron-down", "external-link", "triangle-alert", "plus", "x", "bell", "pencil", "eye", "check",
 ]
 ALIASES = {
     "circle-check": "check-circle", "circle-x": "x-circle", "circle-arrow-up": "arrow-up-circle",

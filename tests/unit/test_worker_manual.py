@@ -83,3 +83,65 @@ def test_vnc_bridges_bytes(client, monkeypatch):
     with c.websocket_connect("/vnc/1", headers=AUTH) as ws:
         ws.send_bytes(b"RFB 003.008\n")
         assert ws.receive_bytes() == b"RFB 003.008\n"
+
+
+def test_autosolve_unknown_session_and_headless_backend(client):
+    c, _ = client
+    assert c.post("/manual/nope/autosolve", headers=AUTH, json={}).status_code == 404
+    r = c.post("/manual", headers=AUTH, json={"url": "https://example.org/", "backend": "obscura"})
+    assert r.status_code == 400 and "headless" in r.json()["detail"]
+    assert c.post("/manual", headers=AUTH, json={"url": "https://example.org/", "backend": "nope"}).status_code == 400
+
+
+async def _noop():
+    pass
+
+
+def _fake_session(app, calls, gate=None):
+    from mendarr.rpc import Snapshot
+    from mendarr.worker.demo import DemoRecorder
+
+    class Page:
+        url = "https://example.org/"
+
+        def is_closed(self):
+            return False
+
+    class Executor:
+        async def solve_live(self, spec, page, tracker, slot, timeout_s):
+            calls.append(("run", s.demo.paused))
+            if gate is not None:
+                await gate.wait()
+            return "_default@builtin", 2, None
+
+    s = SimpleNamespace(
+        id="m1", slot=1, page=Page(), context=SimpleNamespace(pages=[], close=_noop), tracker=None,
+        ended=asyncio.Event(), tasks=[], stack=SimpleNamespace(aclose=_noop),
+        demo=DemoRecorder(), challenge_seen=False, solving=False,
+    )
+    app.state.manual._sessions["m1"] = s
+    app.state.manual.executor = Executor()
+    return s, Snapshot
+
+
+def test_autosolve_runs_plugin_with_demo_paused_and_judges(client, monkeypatch):
+    c, app = client
+    calls = []
+    s, Snapshot = _fake_session(app, calls)
+
+    async def fake_snap(sess, page, timeout):
+        return Snapshot(url="https://example.org/", status=200, title="Hi", html="<html>ok</html>", headers={}, cookies=[])
+
+    monkeypatch.setattr(app.state.manual, "_snap", fake_snap)
+    r = c.post("/manual/m1/autosolve", headers=AUTH, json={"timeout_s": 5})
+    assert r.status_code == 200 and r.json()["ok"] is True and r.json()["clicks"] == 2
+    assert calls == [("run", True)]
+    assert s.demo.paused is False and s.solving is False
+    assert "m1" in app.state.manual._sessions  # stays open
+
+
+def test_autosolve_concurrent_is_409(client):
+    c, app = client
+    s, _ = _fake_session(app, [])
+    s.solving = True
+    assert c.post("/manual/m1/autosolve", headers=AUTH, json={}).status_code == 409

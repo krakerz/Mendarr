@@ -54,6 +54,7 @@ def create_app(
         traces,
         hold_policy=lambda d: config_file.get().for_domain(d).escalation.manual.hold_requests,
         give_up_s=lambda: config_file.get().healer.give_up_after,
+        plugin_resolver=router._resolve_plugin,
     )
     router.manual = manual
 

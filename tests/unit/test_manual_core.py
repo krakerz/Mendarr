@@ -8,7 +8,7 @@ from mendarr.core.cookies import CookieCache
 from mendarr.core.manual import ManualError, ManualManager, ManualSession
 from mendarr.core.traces import TraceStore
 from mendarr.plugins.store import PluginStore
-from mendarr.rpc import ManualResult, ManualStart, ManualStarted, ManualState
+from mendarr.rpc import ManualAutoSolved, ManualResult, PluginSpec, ManualStart, ManualStarted, ManualState
 
 URL = "https://example.org/x"
 DEMO = {"events": [{"t": "pointerdown"}], "frames": []}
@@ -87,6 +87,17 @@ async def finished(s, timeout=2.0):
     assert not s.active
 
 
+async def settle_then_finish(m, s, w):
+    """The watcher must not succeed on its own, however many polls pass; then the user finishes."""
+    start = w.polls
+    for _ in range(300):
+        if w.polls >= start + 4:
+            break
+        await asyncio.sleep(0.01)
+    assert s.active and w.finished == 0
+    assert await m.finish(s.id) is True
+
+
 async def test_start_moves_incident_to_manual(parts):
     store = parts[0]
     iid = incident(store)
@@ -138,7 +149,7 @@ async def test_solve_flow(parts):
     w = FakeManualWorker([state(challenge_snap(), seen=True), state(clear_snap(), seen=True)])
     m = manager(parts, w)
     s = await m.start(iid)
-    await finished(s)
+    await settle_then_finish(m, s, w)
     assert s.status == "solved" and w.finished == 1
     entry = cache.get("example.org", "203.0.113.7")
     assert entry is not None and entry.ua == UA
@@ -160,14 +171,15 @@ async def test_other_domain_or_blank_is_not_success(parts, snap):
     assert s.status == "expired" and w.finished == 0
 
 
-async def test_needs_two_polls_without_challenge(parts):
+async def test_watcher_never_finishes_on_its_own(parts):
     iid = incident(parts[0])
-    w = FakeManualWorker([state(clear_snap()), state(challenge_snap()), state(clear_snap())])
+    w = FakeManualWorker([state(challenge_snap(), seen=True), state(clear_snap(), seen=True)])
     m = manager(parts, w)
     s = await m.start(iid)
-    await finished(s)
-    assert s.status == "solved"
-    assert w.polls >= 4  # clear, challenge (streak reset), clear, clear
+    await asyncio.sleep(0.2)
+    assert s.active and w.finished == 0
+    assert "Finish" in s.detail
+    await m.cancel(s.id)
 
 
 async def test_expiry_keeps_incident_manual(parts):
@@ -233,8 +245,11 @@ async def test_hold_released_by_solve(parts):
     w = FakeManualWorker([state(challenge_snap(), seen=True), state(clear_snap(), seen=True)])
     m = manager(parts, w, hold_policy=lambda d: True)
     s = await m.start(iid)
-    assert await m.wait("example.org", 2.0) is True
-    await finished(s)
+    waiter = asyncio.create_task(m.wait("example.org", 2.0))
+    await asyncio.sleep(0.05)
+    assert await m.finish(s.id) is True
+    assert await waiter is True
+    assert s.status == "solved"
 
 
 async def test_start_adhoc_success(parts):
@@ -245,7 +260,7 @@ async def test_start_adhoc_success(parts):
     assert s.backend == "patchright"
     assert s.domain == "example.org"
     assert w.started[0].backend == "patchright"
-    await finished(s)
+    await settle_then_finish(m, s, w)
     assert s.status == "solved"
     cached = parts[1].get("example.org", "203.0.113.7")
     assert cached and cached.cookies
@@ -283,3 +298,112 @@ async def test_explicit_finish(parts):
     assert s.status == "solved" and w.finished == 1
     cached = parts[1].get("example.org", "203.0.113.7")
     assert cached and cached.cookies
+
+
+async def test_finish_on_challenge_page_fails_without_caching(parts):
+    store = parts[0]
+    iid = incident(store)
+    w = FakeManualWorker([state(challenge_snap(), seen=True)])
+    w.result = ManualResult(challenge_seen=True, snapshot=challenge_snap(), user_agent=UA, egress="203.0.113.7")
+    m = manager(parts, w)
+    s = await m.start(iid)
+    assert await m.finish(s.id) is True
+    assert s.status == "failed" and "not cleared" in s.detail
+    assert parts[1].get("example.org", "203.0.113.7") is None
+    assert store.incident(iid)["state"] == "manual"
+    assert w.cancelled == ["m1"]
+
+
+async def test_concurrent_finish_captures_once(parts):
+    iid = incident(parts[0])
+    w = FakeManualWorker([state(clear_snap(), seen=True)])
+    gate = asyncio.Event()
+    orig = w.manual_finish
+
+    async def slow_finish(sid):
+        await gate.wait()
+        return await orig(sid)
+
+    w.manual_finish = slow_finish
+    m = manager(parts, w)
+    s = await m.start(iid)
+    first = asyncio.create_task(m.finish(s.id))
+    await asyncio.sleep(0.05)
+    assert s.finishing
+    assert await m.finish(s.id) is False
+    gate.set()
+    assert await first is True
+    assert s.status == "solved" and w.finished == 1
+
+
+async def test_failure_releases_the_worker_session(parts):
+    iid = incident(parts[0])
+    w = FakeManualWorker([state(None)])
+    w.state_error = WorkerRejected(404, "gone")
+    m = manager(parts, w)
+    s = await m.start(iid)
+    await finished(s)
+    assert s.status == "failed" and w.cancelled == ["m1"]
+
+
+@pytest.mark.parametrize("backend", ["nope", "obscura"])
+async def test_manual_backend_is_validated(parts, backend):
+    iid = incident(parts[0])
+    w = FakeManualWorker([state(None)])
+    m = manager(parts, w)
+    with pytest.raises(ManualError) as e:
+        await m.start_adhoc(URL, backend=backend)
+    assert e.value.status == 400
+    with pytest.raises(ManualError) as e:
+        await m.start(iid, backend=backend)
+    assert e.value.status == 400
+    assert w.started == []
+
+
+async def test_autosolve_success_keeps_session_open(parts):
+    iid = incident(parts[0])
+    w = FakeManualWorker([state(challenge_snap(), seen=True)])
+    calls = []
+
+    async def manual_autosolve(sid, req):
+        calls.append(req)
+        return ManualAutoSolved(ok=True, plugin="x@v1")
+
+    w.manual_autosolve = manual_autosolve
+    spec = PluginSpec(scope="x", version=1, source="", sha256="")
+    m = manager(parts, w, plugin_resolver=lambda url: spec)
+    s = await m.start(iid)
+    await m.autosolve(s.id)
+    assert s.active and w.finished == 0
+    assert s.detail == "auto solve: cleared — click Finish & Capture"
+    assert calls[0].plugin == spec
+    await asyncio.sleep(0.1)  # the watcher keeps the note
+    assert s.detail.startswith("auto solve: cleared")
+    await m.cancel(s.id)
+
+
+async def test_autosolve_failure_and_concurrency(parts):
+    iid = incident(parts[0])
+    w = FakeManualWorker([state(challenge_snap(), seen=True)])
+    gate = asyncio.Event()
+
+    async def manual_autosolve(sid, req):
+        await gate.wait()
+        return ManualAutoSolved(ok=False, kind="challenge", detail="still there")
+
+    w.manual_autosolve = manual_autosolve
+    m = manager(parts, w)
+    s = await m.start(iid)
+    first = asyncio.create_task(m.autosolve(s.id))
+    await asyncio.sleep(0.05)
+    assert s.autosolving
+    with pytest.raises(ManualError) as e:
+        await m.autosolve(s.id)
+    assert e.value.status == 409
+    gate.set()
+    await first
+    assert s.active and s.detail == "auto solve failed: challenge (still there)"
+    with pytest.raises(ManualError) as e:
+        await m.autosolve("nope")
+    assert e.value.status == 404
+    await m.cancel(s.id)

@@ -238,6 +238,17 @@ def test_clear_closed_incidents_and_delete_incident(store):
     assert store.incident(i3) is not None
     assert len(store.attempts(i3)) == 1
 
-    store.delete_incident(i3)
+    assert store.delete_incident(i3) is False  # still open
+    store.update_incident(i3, state="solved")
+    assert store.delete_incident(i3) is True
     assert store.incident(i3) is None
     assert store.attempts(i3) == []
+
+
+def test_delete_incident_only_when_closed(store):
+    iid = store.note_failure("x.org", kind="challenge_loop", url="https://x.org/", trace_id="", plugin="_default@builtin")
+    assert store.delete_incident(iid) is False
+    assert store.incident(iid) is not None
+    store.update_incident(iid, state="gave_up")
+    assert store.delete_incident(iid) is True
+    assert store.incident(iid) is None

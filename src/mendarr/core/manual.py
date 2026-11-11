@@ -18,8 +18,9 @@ from mendarr.core.cookies import CookieCache
 from mendarr.core.domains import registrable_domain
 from mendarr.core.judge import is_challenge, judge
 from mendarr.core.traces import TraceStore
+from mendarr.plugins.guard import BACKENDS
 from mendarr.plugins.store import OPEN_INCIDENTS, PluginStore
-from mendarr.rpc import ManualResult, ManualStart, Snapshot, SolveResult
+from mendarr.rpc import ManualAutoSolve, ManualResult, ManualStart, PluginSpec, Snapshot, SolveResult
 
 log = logging.getLogger(__name__)
 
@@ -27,6 +28,14 @@ Status = Literal["running", "solved", "expired", "cancelled", "failed"]
 TERMINAL = ("solved", "expired", "cancelled", "failed")
 KEEP_FINISHED = 50
 MAX_POLL_ERRORS = 20
+HEADLESS_BACKENDS = ("obscura",)  # no X display: nothing to show in the live view
+
+
+def check_manual_backend(backend: str) -> None:
+    if backend not in BACKENDS:
+        raise ManualError(400, f"unknown backend {backend!r} (choose one of: {', '.join(BACKENDS)})")
+    if backend in HEADLESS_BACKENDS:
+        raise ManualError(400, f"the {backend} backend is headless and cannot be used for a manual solve")
 
 
 class ManualError(Exception):
@@ -54,6 +63,9 @@ class ManualSession:
     challenge_seen: bool = False
     task: asyncio.Task | None = field(default=None, repr=False)
     backend: str = "camoufox"
+    autosolving: bool = False  # an auto-solve attempt is running
+    auto_note: str = ""  # outcome of the last auto-solve attempt, shown as the status line
+    finishing: bool = False  # a _succeed is in flight: finish()/cancel() wait for it instead of cancelling it
 
     @property
     def active(self) -> bool:
@@ -69,6 +81,8 @@ class ManualManager:
         traces: TraceStore,
         *,
         hold_policy: Callable[[str], bool] = lambda d: False,
+        plugin_resolver: Callable[[str], PluginSpec | None] = lambda url: None,
+        autosolve_timeout_s: float = 60.0,
         give_up_s: Callable[[], float] = lambda: 604800.0,
         timeout_s: float = 600.0,
         poll_s: float = 1.5,
@@ -79,6 +93,8 @@ class ManualManager:
         self._cache = cache
         self._traces = traces
         self._hold_policy = hold_policy
+        self._plugin_resolver = plugin_resolver
+        self._autosolve_timeout_s = autosolve_timeout_s
         self._give_up_s = give_up_s
         self._timeout_s = timeout_s
         self._poll_s = poll_s
@@ -87,6 +103,7 @@ class ManualManager:
         self._holds: dict[str, asyncio.Event] = {}
 
     async def start(self, incident_id: int, backend: str = "camoufox") -> ManualSession:
+        check_manual_backend(backend)
         inc = self._store.incident(incident_id)
         if inc is None:
             raise ManualError(404, "no such incident")
@@ -131,6 +148,7 @@ class ManualManager:
         return s
 
     async def start_adhoc(self, url: str, backend: str = "camoufox") -> ManualSession:
+        check_manual_backend(backend)
         parsed = urlparse(url)
         if parsed.scheme not in ("http", "https") or not parsed.hostname:
             raise ValueError(f"invalid URL: {url!r}")
@@ -182,12 +200,43 @@ class ManualManager:
 
     async def finish(self, sid: str) -> bool:
         s = self._sessions.get(sid)
-        if s is None or not s.active:
+        if s is None or not s.active or s.finishing:  # a capture is already in flight
             return False
         await self._stop_task(s)
         if s.active:
             await self._succeed(s, None)
         return True
+
+    async def autosolve(self, sid: str) -> None:
+        """Run the domain's plugin on the session's live page. The session stays open: the user captures."""
+        s = self._sessions.get(sid)
+        if s is None or not s.active:
+            raise ManualError(404, "no such running manual session")
+        if s.autosolving:
+            raise ManualError(409, "an auto solve is already running")
+        s.autosolving = True
+        s.auto_note = ""
+        s.detail = "auto solve running — watch the live view"
+        req = ManualAutoSolve(plugin=self._plugin_resolver(s.url), timeout_s=self._autosolve_timeout_s)
+        try:
+            res = await self._worker.manual_autosolve(sid, req)
+        except WorkerRejected as e:
+            if e.status == 409:
+                s.autosolving = False
+                raise ManualError(409, "an auto solve is already running") from e
+            note = "auto solve failed: the worker lost the session" if e.status == 404 else f"auto solve failed: {e}"
+        except (WorkerUnavailable, TimeoutError) as e:
+            note = f"auto solve failed: worker unavailable ({e})"
+        else:
+            if res.ok:
+                note = "auto solve: cleared — click Finish & Capture"
+            else:
+                note = f"auto solve failed: {res.kind}" + (f" ({res.detail})" if res.detail else "")
+        finally:
+            s.autosolving = False
+        if s.active:
+            s.auto_note = note
+            s.detail = note
 
     async def cancel(self, sid: str) -> bool:
         s = self._sessions.get(sid)
@@ -233,13 +282,16 @@ class ManualManager:
         t = s.task
         if t is None or t is asyncio.current_task():
             return
+        if s.finishing:  # the watcher is capturing the result: let it finish, don't redo it
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await asyncio.shield(t)
+            return
         t.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await t
 
     async def _watch(self, s: ManualSession) -> None:
         try:
-            ok_streak = 0
             errors = 0
             while True:
                 await asyncio.sleep(self._poll_s)
@@ -255,7 +307,7 @@ class ManualManager:
                     st = await self._worker.manual_state(s.id)
                 except WorkerRejected as e:
                     if e.status == 404:
-                        self._fail(s, "worker lost the session")
+                        await self._fail(s, "worker lost the session")
                         return
                     errors += 1
                     if errors >= MAX_POLL_ERRORS:
@@ -280,23 +332,24 @@ class ManualManager:
                 if is_chal:
                     s.challenge_seen = True
 
+                # A manual session never finishes on its own: capturing is the user's call (Finish & Capture)
+                # or an explicit auto-solve attempt followed by Finish & Capture.
+                if s.autosolving:
+                    continue
                 is_clear = self._clear(s, st.snapshot, s.challenge_seen)
-                ok_streak = ok_streak + 1 if is_clear else 0
-
-                # Auto-solve only if a challenge was actually detected and cleared for 2 consecutive polls
-                if s.challenge_seen and ok_streak >= 2:
-                    await self._succeed(s, st.snapshot)
-                    return
-
-                if s.challenge_seen:
+                if s.auto_note:
+                    s.detail = s.auto_note
+                elif s.challenge_seen and is_clear:
+                    s.detail = "challenge cleared — click Finish & Capture"
+                elif s.challenge_seen:
                     s.detail = "challenge detected — solve it in the live view"
-                elif ok_streak:
+                elif is_clear:
                     s.detail = "page loaded — interact in live view or click Finish & Capture"
         except asyncio.CancelledError:
             raise
         except Exception:
             log.exception("manual solve %s crashed", s.id)
-            self._fail(s, "internal error")
+            await self._fail(s, "internal error")
 
     @staticmethod
     def _clear(s: ManualSession, snap: Snapshot | None, seen: bool) -> bool:
@@ -308,6 +361,7 @@ class ManualManager:
         )
 
     async def _succeed(self, s: ManualSession, last_snap: Snapshot | None) -> None:
+        s.finishing = True
         try:
             res = await self._worker.manual_finish(s.id)
         except Exception as e:
@@ -316,8 +370,11 @@ class ManualManager:
         snap = res.snapshot if self._clear(s, res.snapshot, res.challenge_seen or s.challenge_seen) else last_snap
         if snap is None:
             snap = res.snapshot
-        if snap is None:  # not reachable: _watch only gets here after a clear poll
-            self._fail(s, "no page state to cache")
+        if snap is None:
+            await self._fail(s, "no page state to cache")
+            return
+        if not self._clear(s, snap, res.challenge_seen or s.challenge_seen):
+            await self._fail(s, "page not cleared — still a challenge or blocked")
             return
         ua = res.user_agent or s.user_agent
         egress = res.egress or s.egress
@@ -376,7 +433,11 @@ class ManualManager:
                 log.exception("could not record the manual attempt for %s", s.id)
         self._mark(s, status, detail)
 
-    def _fail(self, s: ManualSession, detail: str) -> None:
+    async def _fail(self, s: ManualSession, detail: str) -> None:
+        try:
+            await self._worker.manual_cancel(s.id)
+        except Exception as e:
+            log.debug("manual cancel for %s after failure: %s", s.id, e)
         if s.incident_id is not None:
             try:
                 self._store.add_attempt(

@@ -18,6 +18,8 @@ from mendarr.rpc import (
     CheckRequest,
     CheckResult,
     EgressInfo,
+    ManualAutoSolve,
+    ManualAutoSolved,
     ManualResult,
     ManualStart,
     ManualState,
@@ -34,7 +36,7 @@ from mendarr.worker.check import CookieChecker
 from mendarr.worker.display import DisplayManager, vnc_port
 from mendarr.worker.egress import Egress
 from mendarr.worker.executor import Executor
-from mendarr.worker.manual import ManualSessions, NoFreeSlot
+from mendarr.worker.manual import AutoSolveBusy, ManualSessions, NoFreeSlot
 from mendarr.worker.sessions import SessionManager
 from mendarr.worker.slots import SlotPool
 from mendarr.worker.vnc import bridge
@@ -61,7 +63,7 @@ def create_app(
         settings.egress_check_url,
         settings.egress_ttl_seconds,
         upstream=upstream,
-        country_url="https://api.country.is/{ip}",
+        country_url=settings.egress_country_url or None,
     )
     if launcher is not None:
         launchers = dict.fromkeys(BACKENDS, launcher)
@@ -76,7 +78,7 @@ def create_app(
     checker = CookieChecker(settings, pool)
     watchdog = Watchdog(settings.plugin_stall_s, settings.plugin_kill_s)
     executor = Executor(settings, pool, sessions, egress, watchdog)
-    manual = ManualSessions(pool, egress)
+    manual = ManualSessions(pool, egress, executor)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -161,6 +163,10 @@ def create_app(
 
     @app.post("/manual")
     async def manual_start(req: ManualStart):
+        if req.backend not in BACKENDS:
+            raise HTTPException(400, f"unknown backend {req.backend!r}")
+        if req.backend == "obscura":
+            raise HTTPException(400, "the obscura backend is headless and cannot be used for a manual solve")
         try:
             return await manual.start(req)
         except NoFreeSlot:
@@ -176,6 +182,16 @@ def create_app(
     @app.post("/manual/{sid}/finish")
     async def manual_finish(sid: str) -> ManualResult:
         res = await manual.finish(sid)
+        if res is None:
+            raise HTTPException(404, "no such manual session")
+        return res
+
+    @app.post("/manual/{sid}/autosolve")
+    async def manual_autosolve(sid: str, req: ManualAutoSolve) -> ManualAutoSolved:
+        try:
+            res = await manual.autosolve(sid, req)
+        except AutoSolveBusy:
+            raise HTTPException(409, "an auto solve is already running") from None
         if res is None:
             raise HTTPException(404, "no such manual session")
         return res
@@ -205,7 +221,7 @@ def create_app(
         ev = getattr(session, "vnc_connected", None)
         if ev is not None:
             ev.set()
-        await bridge(ws, reader, writer, session.ended)
+        await bridge(ws, reader, writer, session.ended, label=f"slot {slot}")
 
     return app
 

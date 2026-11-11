@@ -154,7 +154,12 @@ def delete_incident(request: Request, iid: int) -> Response:
     st = request.app.state
     if st.store.incident(iid) is None:
         return error_page(request, 404, f"No incident #{iid}")
-    st.store.delete_incident(iid)
+    manual = getattr(st, "manual", None)
+    busy = manual is not None and any(s.active and s.incident_id == iid for s in manual.sessions())
+    if busy or not st.store.delete_incident(iid):
+        return error_page(
+            request, 409, f"Incident #{iid} is still open (or being solved manually); close it before deleting."
+        )
     return RedirectResponse(f"/ui/incidents?ok={quote(f'Incident #{iid} deleted')}", status_code=303)
 
 
