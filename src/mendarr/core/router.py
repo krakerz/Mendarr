@@ -1,5 +1,6 @@
 """Request flow: cookie-cache check, then a full solve in the worker, then the verdict."""
 
+import contextlib
 import logging
 import sqlite3
 import time
@@ -15,6 +16,7 @@ from mendarr.core.cookies import CookieCache
 from mendarr.core.domains import hostname, registrable_domain
 from mendarr.core.judge import judge
 from mendarr.core.traces import FailureReport
+from mendarr.core.tracker import SolveTracker
 from mendarr.plugins.store import PluginStore, RollbackEvent
 from mendarr.proxy import redact
 from mendarr.rpc import CheckRequest, Cookie, PluginSpec, ProxySpec, SolveRequest, SolveResult
@@ -93,6 +95,7 @@ class Router:
         clock: Callable[[], float] = time.monotonic,
         store: PluginStore | None = None,
         hooks: RouterHooks | None = None,
+        tracker: SolveTracker | None = None,
     ) -> None:
         self._settings = settings
         self._worker = worker
@@ -101,6 +104,7 @@ class Router:
         self._store = store
         self.hooks = hooks  # set after construction by create_app (healer needs the router)
         self.manual: ManualHold | None = None  # set by create_app
+        self.tracker = tracker
 
     async def request(self, p: V1Params) -> Outcome:
         deadline = self._clock() + p.max_timeout_ms / 1000
@@ -177,28 +181,35 @@ class Router:
         ms = p.max_timeout_ms
         if spec is None:
             spec = self._resolve_plugin(p.url)
-        try:
-            res = await self._worker.solve(
-                SolveRequest(
-                    method=p.method,
-                    url=p.url,
-                    post_data=p.post_data,
-                    cookies=p.cookies,
-                    proxy=p.proxy,
-                    session=p.session,
-                    session_ttl_minutes=p.session_ttl_minutes,
-                    timeout_s=max(remaining() - 0.5, 0.1),
-                    disable_media=p.disable_media,
-                    wait_s=0 if p.return_only_cookies else p.wait_s,
-                    screenshot=p.return_screenshot,
-                    plugin=spec,
-                    trace=True,
+        domain = registrable_domain(p.url)
+        track_ctx = (
+            self.tracker.track("solve", domain, p.url, description=spec.ref if spec else "resolving")
+            if self.tracker is not None and record
+            else contextlib.nullcontext()
+        )
+        with track_ctx:
+            try:
+                res = await self._worker.solve(
+                    SolveRequest(
+                        method=p.method,
+                        url=p.url,
+                        post_data=p.post_data,
+                        cookies=p.cookies,
+                        proxy=p.proxy,
+                        session=p.session,
+                        session_ttl_minutes=p.session_ttl_minutes,
+                        timeout_s=max(remaining() - 0.5, 0.1),
+                        disable_media=p.disable_media,
+                        wait_s=0 if p.return_only_cookies else p.wait_s,
+                        screenshot=p.return_screenshot,
+                        plugin=spec,
+                        trace=True,
+                    )
                 )
-            )
-        except TimeoutError:
-            return Outcome(False, failure_message("timeout", "", ms), failure="timeout")
-        except WorkerUnavailable as e:
-            return Outcome(False, failure_message("network", f"Worker unavailable: {e}", ms), failure="network")
+            except TimeoutError:
+                return Outcome(False, failure_message("timeout", "", ms), failure="timeout")
+            except WorkerUnavailable as e:
+                return Outcome(False, failure_message("network", f"Worker unavailable: {e}", ms), failure="network")
 
         snap = res.snapshot
         verdict = judge(snap, challenge_seen=res.challenge_seen) if res.error is None and snap else None

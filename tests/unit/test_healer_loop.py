@@ -326,3 +326,37 @@ async def test_router_success_recovers_open_incident(env):
     assert out.ok
     inc = only_incident(env)
     assert inc["state"] == "solved" and inc["note"].startswith("recovered")
+
+
+async def test_healer_tracking_during_work(env):
+    from mendarr.core.tracker import SolveTracker
+
+    tracker = SolveTracker()
+    cfg_path = env.tmp / "mendarr.yml"
+    cfg_path.write_text(BASE_YAML.replace("auto_attempts: 0", "auto_attempts: 1"))
+    settings = Settings(data_dir=str(env.tmp), cookie_cache=False)
+    healer = Healer(
+        settings, env.store, env.router, env.traces, ConfigFile(cfg_path),
+        llm=env.llm, notifier=env.notifier, clock=env.clock,
+        heal_dir=env.tmp / "heal", tracker=tracker,
+    )
+    env.router.hooks = healer
+    await env.fail()
+    assert only_incident(env)["state"] == "open"
+
+    seen_in_replay = []
+    orig_replay = env.router.replay
+
+    async def replay_hook(*args, **kwargs):
+        seen_in_replay.extend(tracker.items())
+        return await orig_replay(*args, **kwargs)
+
+    env.router.replay = replay_hook
+    env.worker.solve_results = [ok()]
+    await healer.tick()
+
+    assert len(seen_in_replay) >= 1
+    assert seen_in_replay[0]["type"] == "healer"
+    assert seen_in_replay[0]["domain"] == "example.com"
+    assert "auto attempt" in seen_in_replay[0]["description"]
+    assert tracker.count() == 0  # Finished and cleaned up

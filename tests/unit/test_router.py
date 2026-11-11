@@ -115,3 +115,25 @@ async def test_plain_result_not_stored(router, worker, cache):
     worker.solve_results.append(plain_result(URL))
     await router.request(params())
     assert cache.entries() == []
+
+
+async def test_solve_tracked_during_execution(worker, cache):
+    from mendarr.core.tracker import SolveTracker
+
+    tracker = SolveTracker()
+    r = Router(Settings(), worker, cache, tracker=tracker)
+
+    seen_in_solve = []
+    orig_solve = worker.solve
+
+    async def solve_hook(req):
+        seen_in_solve.extend(tracker.items())
+        return await orig_solve(req)
+
+    worker.solve = solve_hook
+    out = await r.request(params(url="https://tracked.org/page"))
+    assert out.ok
+    assert len(seen_in_solve) == 1
+    assert seen_in_solve[0]["type"] == "solve"
+    assert seen_in_solve[0]["domain"] == "tracked.org"
+    assert tracker.count() == 0  # Finished and cleaned up

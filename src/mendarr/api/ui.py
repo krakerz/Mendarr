@@ -92,6 +92,7 @@ def overview(request: Request) -> Response:
             }
         )
     cfg = st.config_file.get()
+    active_items = st.tracker.items() if hasattr(st, "tracker") and st.tracker else []
     return render(
         request,
         "overview.html",
@@ -102,7 +103,16 @@ def overview(request: Request) -> Response:
         healer_on=st.settings.healer_enabled and cfg.healer.enabled,
         llm_order=cfg.llm.order,
         now=now,
+        active_items=active_items,
     )
+
+
+@router.get("/active", dependencies=AUTH)
+def active_solves(request: Request) -> Response:
+    """Active in-progress automated solves and healer operations, polled by htmx."""
+    st = request.app.state
+    active_items = st.tracker.items() if hasattr(st, "tracker") and st.tracker else []
+    return render(request, "_active_solves.html", active_items=active_items)
 
 
 @router.get("/egress", dependencies=AUTH)

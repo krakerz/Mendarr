@@ -1,0 +1,33 @@
+{% import "_macros.html" as m with context %}
+<section id="active-solves" hx-get="/ui/active" hx-trigger="every 3s" hx-swap="outerHTML">
+  {% if active_items %}
+  <div class="section-head">
+    <h2>In progress <span class="badge badge-running">{{ active_items|length }}</span></h2>
+  </div>
+  <div class="table-wrap">
+    <table class="data">
+      <thead><tr><th>Type</th><th>Domain</th><th>Details</th><th class="num">Elapsed</th></tr></thead>
+      <tbody>
+      {% for item in active_items %}
+      <tr>
+        <td>{{ m.badge(item.type) }}</td>
+        <td class="cell-main">
+          {% if item.incident_id %}
+          <a href="/ui/incidents/{{ item.incident_id }}">{{ item.domain }}</a>
+          {% else %}
+          {{ item.domain }}
+          {% endif %}
+        </td>
+        <td>
+          <span class="mono">{{ item.description }}</span>
+          {% if item.url %}<span class="muted truncate" title="{{ item.url }}">{{ item.url }}</span>{% endif %}
+        </td>
+        <td class="num nowrap">{{ item.elapsed_s }}s</td>
+      </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-bottom: 24px;"></div>
+  {% endif %}
+</section>

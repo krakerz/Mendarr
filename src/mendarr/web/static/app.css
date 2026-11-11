@@ -210,7 +210,10 @@ h1 .badge { height: 24px; font-size: 0.78rem; }
 .badge-gave-up, .badge-retired, .badge-expired, .badge-off, .badge-cancelled { background: var(--grey-bg); color: var(--grey); }
 .badge-rejected, .badge-failed, .badge-parse, .badge-guard, .badge-replay-failed, .badge-retry-failed,
 .badge-switch-failed, .badge-error, .badge-err { background: var(--red-bg); color: var(--red); }
-.badge-healing, .badge-info, .badge-running { background: var(--blue-bg); color: var(--blue); }
+.badge-solve, .badge-healing, .badge-info, .badge-running { background: var(--blue-bg); color: var(--blue); }
+
+@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+.spin { animation: spin 1.5s linear infinite; }
 
 /* ---------- buttons ---------- */
 .btn {

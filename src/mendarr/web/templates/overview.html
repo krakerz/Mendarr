@@ -9,6 +9,11 @@
   </div>
 </header>
 <div class="stats">
+  <div class="stat">
+    <div class="stat-top"><span class="stat-label">In progress</span><span class="stat-icon {{ 'accent' if active_items else '' }}">{{ m.icon("refresh-cw", "spin" if active_items else "") }}</span></div>
+    <div class="stat-value">{{ active_items|length }}</div>
+    <div class="stat-sub">{{ "solving now" if active_items else "idle" }}</div>
+  </div>
   <a class="stat" href="/ui/incidents">
     <div class="stat-top"><span class="stat-label">Open incidents</span><span class="stat-icon {{ 'amber' if incidents else 'green' }}">{{ m.icon("siren") }}</span></div>
     <div class="stat-value">{{ incidents|length }}</div>
@@ -36,6 +41,7 @@
   </div>
 </div>
 <div id="overview" hx-get="/ui" hx-select="#overview" hx-swap="outerHTML" hx-trigger="every 15s">
+  {% include "_active_solves.html" %}
   <section>
     <div class="section-head"><h2>Domains</h2></div>
     {% if rows %}
