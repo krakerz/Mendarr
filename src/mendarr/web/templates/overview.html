@@ -8,39 +8,34 @@
     <p class="page-sub">Solver health per domain, refreshed every 15 s.</p>
   </div>
 </header>
-<div class="stats">
-  <div class="stat">
-    <div class="stat-top"><span class="stat-label">In progress</span><span class="stat-icon {{ 'accent' if active_items else '' }}">{{ m.icon("refresh-cw", "spin" if active_items else "") }}</span></div>
-    <div class="stat-value">{{ active_items|length }}</div>
-    <div class="stat-sub">{{ "solving now" if active_items else "idle" }}</div>
-  </div>
-  <a class="stat" href="/ui/incidents">
-    <div class="stat-top"><span class="stat-label">Open incidents</span><span class="stat-icon {{ 'amber' if incidents else 'green' }}">{{ m.icon("siren") }}</span></div>
-    <div class="stat-value">{{ incidents|length }}</div>
-    <div class="stat-sub">{{ "need attention" if incidents else "all clear" }}</div>
-  </a>
-  <div class="stat">
-    <div class="stat-top"><span class="stat-label">Domains</span><span class="stat-icon accent">{{ m.icon("network") }}</span></div>
-    <div class="stat-value">{{ rows|length }}</div>
-    <div class="stat-sub">seen in the last 7 days</div>
-  </div>
-  <a class="stat" href="/ui/cookies">
-    <div class="stat-top"><span class="stat-label">Cached cookies</span><span class="stat-icon">{{ m.icon("cookie") }}</span></div>
-    <div class="stat-value">{{ cookies }}</div>
-    <div class="stat-sub">clearances ready to reuse</div>
-  </a>
-  <div class="stat">
-    <div class="stat-top"><span class="stat-label">Healer</span><span class="stat-icon {{ 'green' if healer_on else '' }}">{{ m.icon("refresh-cw") }}</span></div>
-    <div class="stat-value">{{ "on" if healer_on else "off" }}</div>
-    <div class="stat-sub" title="{{ llm_order|join(', ') }}">{% if llm_order %}{{ llm_order|join(", ") }}{% else %}no LLM configured{% endif %}</div>
-  </div>
-  <div class="stat stat-egress" hx-get="/ui/egress" hx-trigger="load" hx-swap="innerHTML">
-    <div class="stat-top"><span class="stat-label">Egress</span><span class="stat-icon">{{ m.icon("wifi") }}</span></div>
-    <div class="stat-value sm">…</div>
-    <div class="stat-sub">looking up</div>
-  </div>
-</div>
 <div id="overview" hx-get="/ui" hx-select="#overview" hx-swap="outerHTML" hx-trigger="every 15s">
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-top"><span class="stat-label">In progress</span><span class="stat-icon {{ 'accent' if active_items else '' }}">{{ m.icon("refresh-cw", "spin" if active_items else "") }}</span></div>
+      <div id="stat-active-val" class="stat-value">{{ active_items|length }}</div>
+      <div id="stat-active-sub" class="stat-sub">{{ "solving now" if active_items else "idle" }}</div>
+    </div>
+    <a class="stat" href="/ui/incidents">
+      <div class="stat-top"><span class="stat-label">Open incidents</span><span class="stat-icon {{ 'amber' if incidents else 'green' }}">{{ m.icon("siren") }}</span></div>
+      <div class="stat-value">{{ incidents|length }}</div>
+      <div class="stat-sub">{{ "need attention" if incidents else "all clear" }}</div>
+    </a>
+    <a class="stat" href="/ui/cookies">
+      <div class="stat-top"><span class="stat-label">Domains & Cache</span><span class="stat-icon accent">{{ m.icon("cookie") }}</span></div>
+      <div class="stat-value">{{ rows|length }} <span class="muted" style="font-size: 1.05rem; font-weight: 500;">/ {{ cookies }}</span></div>
+      <div class="stat-sub">{{ rows|length }} domains · {{ cookies }} cached</div>
+    </a>
+    <div class="stat">
+      <div class="stat-top"><span class="stat-label">Healer</span><span class="stat-icon {{ 'green' if healer_on else '' }}">{{ m.icon("refresh-cw") }}</span></div>
+      <div class="stat-value">{{ "on" if healer_on else "off" }}</div>
+      <div class="stat-sub" title="{{ llm_order|join(', ') }}">{% if llm_order %}{{ llm_order|join(", ") }}{% else %}no LLM configured{% endif %}</div>
+    </div>
+    <div class="stat stat-egress" hx-get="/ui/egress" hx-trigger="load" hx-swap="innerHTML">
+      <div class="stat-top"><span class="stat-label">Egress</span><span class="stat-icon">{{ m.icon("wifi") }}</span></div>
+      <div class="stat-value sm">…</div>
+      <div class="stat-sub">looking up</div>
+    </div>
+  </div>
   {% include "_active_solves.html" %}
   <section>
     <div class="section-head"><h2>Domains</h2></div>

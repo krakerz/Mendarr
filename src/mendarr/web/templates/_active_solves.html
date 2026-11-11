@@ -1,4 +1,8 @@
 {% import "_macros.html" as m with context %}
+{% if request.headers.get("hx-request") %}
+<div id="stat-active-val" hx-swap-oob="true" class="stat-value">{{ active_items|length }}</div>
+<div id="stat-active-sub" hx-swap-oob="true" class="stat-sub">{{ "solving now" if active_items else "idle" }}</div>
+{% endif %}
 <section id="active-solves" hx-get="/ui/active" hx-trigger="every 3s" hx-swap="outerHTML">
   {% if active_items %}
   <div class="section-head">
