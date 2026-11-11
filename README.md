@@ -44,6 +44,10 @@ services:
       # - MENDARR_PROXY_URL=socks5://192.168.1.10:1080
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
+    sysctls:
+      - net.ipv6.conf.all.disable_ipv6=1
+      - net.ipv6.conf.default.disable_ipv6=1
+      - net.ipv6.conf.lo.disable_ipv6=1
     restart: unless-stopped
 
   mendarr:
@@ -73,6 +77,8 @@ docker compose up -d
 
 - **FlareSolverr API**: `http://localhost:8191/v1`
 - **Web Dashboard**: `http://localhost:8191/ui` (Default: `admin` / `admin`)
+
+> **Note on Reverse Proxies**: If serving Mendarr behind Nginx, Caddy, Traefik, or NPM, enable WebSocket upgrades (`Upgrade` and `Connection` headers) on `/ui/vnc/` for the interactive Manual Solve studio.
 
 ---
 

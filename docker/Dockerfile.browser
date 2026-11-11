@@ -32,9 +32,11 @@ RUN uv sync --frozen --no-dev --extra browser
 # fetched as the runtime user so the browser lands in its cache (~/.cache/camoufox)
 RUN camoufox fetch && patchright install chromium
 
-# plugin code runs as this user: it must not be able to patch the app or the venv
+# plugin code runs as this user: it must not be able to patch the app or the venv,
+# but fpgen must manage its model data inside site-packages
 USER root
-RUN chown -R root:root /app && chmod -R go-w /app
+RUN chown -R root:root /app && chmod -R go-w /app \
+    && chown -R mendarr:mendarr /app/.venv/lib/python3.12/site-packages/fpgen
 USER mendarr
 
 EXPOSE 8192

@@ -5,6 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.4] — 2026-11-11
+
+### Fixed
+- Fixed `FpgenModelError` in `mendarr-browser` by preserving ownership of `fpgen/data` in site-packages for the runtime user.
+- Disabled IPv6 via `sysctls` on `mendarr-browser` in `docker/compose.example.yml` to prevent kernel-level IPv6 PTR lookups stalling VNC.
+
 ## [0.5.3] — 2026-11-11
 
 ### Fixed
