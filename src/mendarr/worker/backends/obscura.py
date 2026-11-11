@@ -86,13 +86,17 @@ async def launch(display: int, *, settings: Settings, exit_ip: Any = None) -> La
     log.info("Starting obscura on port %d: %s", cdp_port, " ".join(safe_cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+        stdout=asyncio.subprocess.DEVNULL,  # never read: a full pipe would block obscura
+        stderr=asyncio.subprocess.DEVNULL,
         env={**os.environ, "DISPLAY": f":{display}"},  # Keep DISPLAY for any X11 deps
     )
 
     # Wait for CDP server to be ready
-    await _wait_for_cdp(cdp_endpoint)
+    try:
+        await _wait_for_cdp(cdp_endpoint)
+    except BaseException:
+        await _terminate_process(proc)
+        raise
 
     # Connect via Playwright
     try:

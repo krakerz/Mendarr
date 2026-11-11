@@ -105,6 +105,7 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_PROXY_URL` | empty | Upstream proxy URL (`http://`, `https://`, `socks5://`) |
 | `MENDARR_PROXY_USERNAME` | empty | Username for upstream proxy (alternative to URL embedding) |
 | `MENDARR_PROXY_PASSWORD` | empty | Password for upstream proxy |
+| `MENDARR_EGRESS_COUNTRY_URL` | `https://api.country.is/{ip}` | Country lookup for the exit IP (`{ip}` is replaced; the IP is sent to that service). Empty disables it |
 | `MENDARR_GEOIP` | `true` | Match Camoufox timezone & locale to egress IP |
 
 ### Advanced & Integrations

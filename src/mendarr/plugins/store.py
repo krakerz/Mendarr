@@ -471,11 +471,16 @@ class PluginStore:
             self._conn.commit()
             return count
 
-    def delete_incident(self, iid: int) -> None:
+    def delete_incident(self, iid: int) -> bool:
+        """Delete a closed (solved/gave_up) incident; an open one is kept and False is returned."""
         with self._lock:
+            row = self._conn.execute("SELECT state FROM incidents WHERE id = ?", (iid,)).fetchone()
+            if row is None or row[0] not in ("solved", "gave_up"):
+                return False
             self._conn.execute("DELETE FROM attempts WHERE incident = ?", (iid,))
             self._conn.execute("DELETE FROM incidents WHERE id = ?", (iid,))
             self._conn.commit()
+            return True
 
     # --- M3 incident lifecycle ---
 

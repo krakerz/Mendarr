@@ -9,6 +9,8 @@ from mendarr.rpc import (
     CheckResult,
     EgressInfo,
     ManualResult,
+    ManualAutoSolve,
+    ManualAutoSolved,
     ManualStart,
     ManualStarted,
     ManualState,
@@ -45,6 +47,7 @@ class WorkerClient(Protocol):
     async def manual_state(self, sid: str) -> ManualState: ...
     async def manual_finish(self, sid: str) -> ManualResult: ...
     async def manual_cancel(self, sid: str) -> bool: ...
+    async def manual_autosolve(self, sid: str, req: ManualAutoSolve) -> ManualAutoSolved: ...
     async def aclose(self) -> None: ...
 
 
@@ -106,6 +109,10 @@ class HttpWorkerClient:
 
     async def manual_finish(self, sid: str) -> ManualResult:
         return ManualResult.model_validate(await self._call("POST", f"/manual/{sid}/finish", timeout=30))
+
+    async def manual_autosolve(self, sid: str, req: ManualAutoSolve) -> ManualAutoSolved:
+        data = await self._call("POST", f"/manual/{sid}/autosolve", timeout=req.timeout_s + 15, json=req.model_dump())
+        return ManualAutoSolved.model_validate(data)
 
     async def manual_cancel(self, sid: str) -> bool:
         data = await self._call("DELETE", f"/manual/{sid}")

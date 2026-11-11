@@ -112,6 +112,33 @@ class Executor:
                 egress=egress,
             )
 
+    async def solve_live(self, spec, page, tracker, slot: int, timeout_s: float) -> tuple[str, int, WorkerError | None]:
+        """Run a plugin on a page that is already open (a manual session): the same loader, Ctx and
+        watchdog as a normal solve, no navigation and no browser/slot handling. Returns (ref, clicks, error)."""
+        ref = spec.ref if spec else loader.BUILTIN_REF
+        try:
+            plugin = loader.load_spec(spec)
+        except loader.PluginLoadError as e:
+            log.warning("plugin rejected: %s", e)
+            return ref, 0, WorkerError(type="guard", detail=str(e))
+        ctx = Ctx(
+            page,
+            deadline=time.monotonic() + timeout_s,
+            display=slot,
+            click_backend=self.settings.click_backend,
+            main_headers=tracker.headers,
+        )
+        error = None
+        try:
+            async with asyncio.timeout(ctx.remaining()):
+                with self._plugin_running(ctx.deadline):
+                    await plugin.solve(page, ctx)
+        except TimeoutError:
+            error = WorkerError(type="deadline", detail="Timeout")
+        except Exception as e:
+            error = WorkerError(type="plugin", detail=f"{type(e).__name__}: {e}")
+        return plugin.ref, ctx.clicks, error
+
     async def _run(self, req, slot, session, deadline, egress, plugin, backend) -> SolveResult:
         PlaywrightError, PlaywrightTimeout = backends.error_types(backend)
 

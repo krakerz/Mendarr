@@ -26,6 +26,7 @@ class StubManager:
         self.error: ManualError | None = None
         self.cancelled: list[str] = []
         self.finished: list[str] = []
+        self.autosolved: list[str] = []
 
     async def start(self, iid):
         if self.error:
@@ -62,6 +63,11 @@ class StubManager:
 
     async def finish(self, sid):
         self.finished.append(sid)
+
+    async def autosolve(self, sid):
+        if self.error:
+            raise self.error
+        self.autosolved.append(sid)
 
 
 @pytest.fixture
@@ -204,3 +210,17 @@ def test_clear_button_renders_when_finished(ui_client, stub):
     r2 = ui_client.get("/ui/manual")
     assert r2.status_code == 200
     assert "/ui/manual/clear" not in r2.text
+
+
+def test_autosolve_route(ui_client, stub):
+    r = post(ui_client, "/ui/manual/m1/autosolve")
+    assert r.status_code == 303 and r.headers["location"] == "/ui/manual/m1"
+    assert stub.autosolved == ["m1"]
+    assert ui_client.post("/ui/manual/m1/autosolve", follow_redirects=False).status_code == 403
+    assert post(ui_client, "/ui/manual/zz/autosolve").status_code == 404
+    stub.error = ManualError(409, "an auto solve is already running")
+    assert post(ui_client, "/ui/manual/m1/autosolve").status_code == 409
+
+
+def test_session_page_has_autosolve_button(ui_client, stub):
+    assert "/ui/manual/m1/autosolve" in ui_client.get("/ui/manual/m1").text

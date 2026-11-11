@@ -5,6 +5,27 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.6] — 2026-11-11
+
+### Added
+- Manual solve sessions get an "Attempt auto solve" button that runs the domain's solver plugin on the live page while you watch; the session stays open and you capture with "Finish & Capture". Its clicks are not recorded as your demonstration.
+- The worker logs live-view timings (first x11vnc bytes, first client message, first frame sent, close) and how long the manual-solve page took to load; a failed initial navigation is now a warning. The live-view badge shows how long the connection took ("connected in 0.3s", then the first frame), and the browser console logs each step.
+- `MENDARR_EGRESS_COUNTRY_URL` sets the service used to look up the exit IP's country (empty disables it).
+
+### Changed
+- A manual solve session never finishes on its own any more: cookies and the demonstration are captured only when you click "Finish & Capture" (or after an auto solve attempt, when you do).
+- The manual-solve page no longer says that success is detected automatically.
+- Manual solves refuse the headless Obscura backend and unknown backends with a clear error instead of "worker unavailable".
+- Incidents can only be deleted once they are solved or given up.
+
+### Fixed
+- "Finish & Capture" on a page that is still a challenge or blocked now fails the session instead of caching its cookies and marking the incident solved.
+- "Finish & Capture" no longer races the session watcher, and a failed manual session now releases its browser slot on the worker.
+- The "Finish & Capture" button's check icon was missing from the icon sprite.
+- Obscura no longer stalls when its output pipes fill up, and its process is stopped if it never becomes ready.
+- A failed exit-IP lookup is remembered briefly so manual starts and solves don't each wait on a dead endpoint, and a failed country lookup is retried instead of being cached for the whole interval.
+- Live-view WebSocket origin check uses the first value of a multi-proxy `X-Forwarded-Host`.
+
 ## [0.5.5] — 2026-11-11
 
 ### Fixed

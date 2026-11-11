@@ -4,11 +4,21 @@ import asyncio
 import contextlib
 import logging
 import secrets
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
 from mendarr.core import judge
-from mendarr.rpc import ManualResult, ManualStart, ManualStarted, ManualState, Snapshot, TraceData
+from mendarr.rpc import (
+    ManualAutoSolve,
+    ManualAutoSolved,
+    ManualResult,
+    ManualStart,
+    ManualStarted,
+    ManualState,
+    Snapshot,
+    TraceData,
+)
 from mendarr.worker.demo import DemoRecorder
 from mendarr.worker.egress import Egress
 from mendarr.worker.pagestate import MainResponseTracker, pw_proxy, snapshot
@@ -22,6 +32,10 @@ STATE_HTML_CHARS = 300_000
 
 
 class NoFreeSlot(Exception):
+    pass
+
+
+class AutoSolveBusy(Exception):
     pass
 
 
@@ -43,12 +57,14 @@ class _Session:
     ended: asyncio.Event = field(default_factory=asyncio.Event)
     vnc_connected: asyncio.Event = field(default_factory=asyncio.Event)
     tasks: list[asyncio.Task] = field(default_factory=list)
+    solving: bool = False  # an auto-solve attempt is running
 
 
 class ManualSessions:
-    def __init__(self, pool: SlotPool, egress: Egress) -> None:
+    def __init__(self, pool: SlotPool, egress: Egress, executor: Any = None) -> None:
         self.pool = pool
         self.egress = egress
+        self.executor = executor  # runs the auto-solve plugin (worker.executor.Executor.solve_live)
         self._sessions: dict[str, _Session] = {}
 
     async def start(self, req: ManualStart) -> ManualStarted:
@@ -100,13 +116,16 @@ class ManualSessions:
         s.demo.watch(page)
 
     async def _goto(self, s: _Session) -> None:
+        t0 = time.monotonic()
         try:
             # Give the user's VNC client up to 8s to connect first so the human sees the initial navigation
             with contextlib.suppress(TimeoutError, asyncio.TimeoutError):
                 await asyncio.wait_for(s.vnc_connected.wait(), timeout=8.0)
+            t1 = time.monotonic()
             await s.page.goto(s.url, wait_until="domcontentloaded", timeout=30_000)
+            log.info("manual %s: vnc wait %.1fs, page loaded in %.1fs", s.id, t1 - t0, time.monotonic() - t1)
         except Exception as e:
-            log.info("manual %s: initial navigation: %s", s.id, e)
+            log.warning("manual %s: initial navigation failed after %.1fs: %s", s.id, time.monotonic() - t0, e)
 
     async def _expire(self, sid: str, delay: float) -> None:
         await asyncio.sleep(delay)
@@ -146,6 +165,39 @@ class ManualSessions:
             return ManualState(
                 id=s.id, status="running", challenge_seen=s.challenge_seen, snapshot=snap, events=len(s.demo.events)
             )
+
+    async def autosolve(self, sid: str, req: ManualAutoSolve) -> ManualAutoSolved | None:
+        """Run the domain's plugin on the session's live page and judge the page; the session stays open.
+
+        The session lock is not held: state polls must keep working while the plugin runs.
+        """
+        s = self._sessions.get(sid)
+        if s is None:
+            return None
+        if s.solving:
+            raise AutoSolveBusy
+        if self.executor is None:
+            return ManualAutoSolved(ok=False, kind="internal", detail="auto solve is not available")
+        s.solving = True
+        s.demo.paused = True
+        try:
+            page = self._current_page(s)
+            if page is None:
+                return ManualAutoSolved(ok=False, kind="no_page", detail="no open tab")
+            ref, clicks, error = await self.executor.solve_live(req.plugin, page, s.tracker, s.slot, req.timeout_s)
+            if error is not None:
+                return ManualAutoSolved(ok=False, kind=error.type, detail=error.detail, clicks=clicks, plugin=ref)
+            page = self._current_page(s)
+            snap = await self._snap(s, page, 10) if page is not None else None
+            if snap is None:
+                return ManualAutoSolved(ok=False, kind="no_page", detail="page state unavailable", clicks=clicks, plugin=ref)
+            verdict = judge.judge(snap, challenge_seen=s.challenge_seen)
+            return ManualAutoSolved(
+                ok=verdict.ok, kind="" if verdict.ok else verdict.reason, clicks=clicks, plugin=ref
+            )
+        finally:
+            s.solving = False
+            s.demo.paused = False
 
     async def finish(self, sid: str) -> ManualResult | None:
         s = self._sessions.get(sid)

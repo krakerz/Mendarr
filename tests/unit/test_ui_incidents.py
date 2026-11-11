@@ -112,8 +112,12 @@ def test_clear_closed_and_delete_incident(ui_client):
     assert r.status_code == 303 and "closed incident(s) cleared" in unquote(r.headers["location"])
     assert store.incident(iid) is None
 
-    # Delete specific incident
+    # Delete specific incident: an open one is refused
     iid2, _ = _seed(ui_client)
+    r = ui_client.post(f"/ui/incidents/{iid2}/delete", data={"csrf": ui_client.csrf}, follow_redirects=False)
+    assert r.status_code == 409 and "still open" in r.text
+    assert store.incident(iid2) is not None
+    ui_client.post(f"/ui/incidents/{iid2}/close", data={"csrf": ui_client.csrf, "state": "gave_up"})
     r = ui_client.post(f"/ui/incidents/{iid2}/delete", data={"csrf": ui_client.csrf}, follow_redirects=False)
     assert r.status_code == 303 and f"Incident #{iid2} deleted" in unquote(r.headers["location"])
     assert store.incident(iid2) is None

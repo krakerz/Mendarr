@@ -100,6 +100,7 @@ class DemoRecorder:
         self.events: list[dict] = []
         self.start_url = ""
         self._pending: set[asyncio.Task] = set()
+        self.paused = False  # while the auto-solver drives the page its clicks are not the human's demo
 
     async def install(self, context: Any) -> None:
         await context.expose_binding(self.name, self._on_event)
@@ -112,7 +113,7 @@ class DemoRecorder:
         return round(self._clock() - self._t0, 3)
 
     def _on_event(self, source: Any, ev: Any) -> None:
-        if len(self.events) >= MAX_EVENTS or not isinstance(ev, dict):
+        if self.paused or len(self.events) >= MAX_EVENTS or not isinstance(ev, dict):
             return
         frame = source.get("frame") if isinstance(source, dict) else None
         main = frame is None or frame.parent_frame is None
@@ -146,7 +147,7 @@ class DemoRecorder:
             e["frame_selector"] = ""
 
     def _on_nav(self, frame: Any) -> None:
-        if frame.url == "about:blank" or len(self.events) >= MAX_EVENTS:
+        if self.paused or frame.url == "about:blank" or len(self.events) >= MAX_EVENTS:
             return
         main = frame.parent_frame is None
         self.events.append({"t": self._t(), "type": "nav", "main": main, "url": _cut(frame.url)})

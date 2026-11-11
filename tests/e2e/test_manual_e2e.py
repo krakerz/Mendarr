@@ -93,21 +93,35 @@ def test_manual_solve_through_vnc():
         cookie = "; ".join(f"{k}={v}" for k, v in client.cookies.items())
         rfb = RfbClient(f"{API.replace('http', 'ws', 1)}/ui/vnc/{slot}", {"Cookie": cookie, "Origin": API})
         w, h = rfb.handshake()
+        frame_s = rfb.first_frame(w, h)
+        print(f"first framebuffer update after {frame_s:.2f}s")
+        assert frame_s < 10, f"first frame took {frame_s:.1f}s"
         time.sleep(3)  # page load
         t_click = time.time()
         rfb.click(w // 2, h // 2)
         retries = [(w // 2, h * 2 // 3), (w // 3, h // 2)]
-        solved = False
+        cleared = False
         for i in range(30):
             time.sleep(1)
-            if "Solved" in client.get(f"/ui/manual/{sid}/status").text:
-                solved = True
+            if "challenge cleared" in client.get(f"/ui/manual/{sid}/status").text:
+                cleared = True
                 break
             if i == 9 and retries:  # window geometry isn't pinned: probe other spots
                 rfb.click(*retries.pop(0))
             elif i == 14 and retries:
                 rfb.click(*retries.pop(0))
-        assert solved, "manual session never reported Solved"
+        assert cleared, "manual session never reported the challenge cleared"
+        # manual sessions never capture on their own: the human finishes them
+        assert "badge-solved" not in client.get(f"/ui/manual/{sid}/status").text
+        r = client.post(f"/ui/manual/{sid}/finish", headers={"X-CSRF-Token": token})
+        assert r.status_code == 303, r.text[:300]
+        solved = False
+        for _ in range(15):
+            if "badge-solved" in client.get(f"/ui/manual/{sid}/status").text:
+                solved = True
+                break
+            time.sleep(1)
+        assert solved, "manual session never reported Solved after Finish & Capture"
 
         thread.join(timeout=30)
         assert not thread.is_alive()

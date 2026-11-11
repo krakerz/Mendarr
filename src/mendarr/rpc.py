@@ -123,6 +123,19 @@ class ManualResult(BaseModel):
     trace: TraceData | None = None  # steps = the demo as readable lines, plus screenshot/DOM of the end state
 
 
+class ManualAutoSolve(BaseModel):
+    plugin: PluginSpec | None = None  # None = the worker's builtin _default
+    timeout_s: float = 60
+
+
+class ManualAutoSolved(BaseModel):
+    ok: bool  # the page judged clear afterwards; the session stays open either way
+    kind: str = ""  # failure kind: guard | plugin | deadline | internal | challenge | blocked | ...
+    detail: str = ""
+    clicks: int = 0
+    plugin: str = ""
+
+
 class CheckRequest(BaseModel):
     method: Literal["GET", "POST"] = "GET"
     url: str

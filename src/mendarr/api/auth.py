@@ -138,7 +138,7 @@ async def require_user(conn: HTTPConnection) -> str:
     sess = auth.session(conn.cookies.get(COOKIE))
     if conn.scope["type"] == "websocket":
         origin = conn.headers.get("origin")
-        host = conn.headers.get("x-forwarded-host") or conn.headers.get("host") or ""
+        host = conn.headers.get("x-forwarded-host", "").split(",")[0].strip() or conn.headers.get("host") or ""
         origin_host = urlsplit(origin).netloc if origin else ""
 
         def _norm_host(h: str) -> str:

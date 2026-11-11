@@ -19,15 +19,20 @@ async def test_text_body():
     assert (await e.info()).ip == "5.6.7.8"
 
 
-async def test_error_is_unknown_and_not_cached():
+async def test_error_is_unknown_and_retried_after_a_short_pause():
     calls = []
+    now = [100.0]
 
     def handler(r):
         calls.append(1)
         return httpx.Response(500)
 
-    e = egress(handler)
+    e = egress(handler, clock=lambda: now[0])
     assert (await e.info()).ip == "unknown"
+    now[0] = 105
+    assert (await e.info()).ip == "unknown"
+    assert len(calls) == 1  # a dead endpoint is not hit again right away
+    now[0] = 116
     await e.info()
     assert len(calls) == 2
 
@@ -121,3 +126,40 @@ async def test_country_secondary_lookup():
     info = await e.info()
     assert info.ip == "93.118.41.92"
     assert info.country == "JP"
+
+
+async def test_failed_country_lookup_is_retried_but_ip_stays_cached():
+    now = [100.0]
+    main, country = [], []
+    country_ok = [False]
+
+    def handler(r):
+        if "api.country.is" in str(r.url):
+            country.append(1)
+            if not country_ok[0]:
+                return httpx.Response(500)
+            return httpx.Response(200, json={"country": "JP"})
+        main.append(1)
+        return httpx.Response(200, json={"ip": "93.118.41.92"})
+
+    e = egress(handler, ttl=60, clock=lambda: now[0], country_url="https://api.country.is/{ip}")
+    assert (await e.info()).country is None
+    now[0] = 105
+    assert (await e.info()).country is None  # too soon to retry
+    assert len(country) == 1
+    now[0] = 116
+    country_ok[0] = True
+    info = await e.info()
+    assert (info.ip, info.country) == ("93.118.41.92", "JP")
+    assert len(main) == 1 and len(country) == 2
+    await e.info()
+    assert len(country) == 2  # resolved: no more retries
+
+
+async def test_empty_country_url_disables_lookup():
+    def handler(r):
+        assert "country" not in str(r.url)
+        return httpx.Response(200, json={"ip": "1.2.3.4"})
+
+    info = await egress(handler, country_url=None).info()
+    assert info.country is None

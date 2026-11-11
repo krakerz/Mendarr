@@ -40,6 +40,15 @@ class RfbClient:
         self._recv_exact(name_len)
         return w, h
 
+    def first_frame(self, w: int, h: int) -> float:
+        """Request a full framebuffer update (raw encoding, the default) and return seconds until its header arrives."""
+        t0 = time.monotonic()
+        self._ws.send(struct.pack(">BBHHHH", 3, 0, 0, 0, w, h))
+        msg_type = self._recv_exact(4)[0]  # type, padding, number of rectangles
+        if msg_type != 0:
+            raise RuntimeError(f"expected FramebufferUpdate, got message type {msg_type}")
+        return time.monotonic() - t0
+
     def _pointer(self, mask: int, x: int, y: int) -> None:
         self._ws.send(struct.pack(">BBHH", 5, mask, x, y))
 
