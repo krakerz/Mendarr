@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-11-11
+
+### Fixed
+- Dashboard Egress card stayed blank ("… looking up"): htmx 2.0 does not swap `hx-trigger="load"` responses for elements present on first paint, so the `/ui/egress` response was never rendered. The card now loads on first paint and re-refreshes on the same 15 s cadence as the overview.
+
 ## [0.7.0] — 2026-11-11
 
 ### Added
