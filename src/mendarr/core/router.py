@@ -211,49 +211,49 @@ class Router:
             except WorkerUnavailable as e:
                 return Outcome(False, failure_message("network", f"Worker unavailable: {e}", ms), failure="network")
 
-        snap = res.snapshot
-        verdict = judge(snap, challenge_seen=res.challenge_seen) if res.error is None and snap else None
-        if verdict is not None and verdict.ok and snap is not None:
-            if record:
-                self._record(spec, res, ok=True)
-                if res.challenge_seen:
-                    self._hook("success", registrable_domain(p.url))
-            if res.challenge_seen and use_cache:
-                self._cache.put(registrable_domain(p.url), res.egress, res.user_agent, snap.cookies)
-            return Outcome(
-                ok=True,
-                message=MSG_SOLVED if res.challenge_seen else MSG_NOT_DETECTED,
-                url=snap.url,
-                status=snap.status,
-                headers=snap.headers,
-                html=snap.html,
-                cookies=snap.cookies,
-                user_agent=res.user_agent,
-                screenshot_b64=res.screenshot_b64,
-                turnstile_token=res.turnstile_token,
-                result=res,
-            )
+            snap = res.snapshot
+            verdict = judge(snap, challenge_seen=res.challenge_seen) if res.error is None and snap else None
+            if verdict is not None and verdict.ok and snap is not None:
+                if record:
+                    self._record(spec, res, ok=True)
+                    if res.challenge_seen:
+                        self._hook("success", registrable_domain(p.url))
+                if res.challenge_seen and use_cache:
+                    self._cache.put(registrable_domain(p.url), res.egress, res.user_agent, snap.cookies)
+                return Outcome(
+                    ok=True,
+                    message=MSG_SOLVED if res.challenge_seen else MSG_NOT_DETECTED,
+                    url=snap.url,
+                    status=snap.status,
+                    headers=snap.headers,
+                    html=snap.html,
+                    cookies=snap.cookies,
+                    user_agent=res.user_agent,
+                    screenshot_b64=res.screenshot_b64,
+                    turnstile_token=res.turnstile_token,
+                    result=res,
+                )
 
-        kind = classify(error=res.error, snapshot=snap, verdict=verdict, clicks=res.clicks)
-        if record:
-            self._record(spec, res, ok=False, kind=kind)
-        if res.error is not None:
-            detail = res.error.detail
-        elif kind == "network" and snap is not None:
-            detail = f"Cloudflare origin error {snap.status}"
-        else:
-            detail = verdict.reason if verdict is not None else ""
-        domain = registrable_domain(p.url)
-        log.info("solve failed: domain=%s kind=%s plugin=%s", domain, kind, res.plugin)
-        if record:
-            self._hook(
-                "failure",
-                FailureReport(
-                    url=p.url, domain=domain, kind=kind, detail=detail, plugin=res.plugin, result=res,
-                    session=bool(p.session),
-                ),
-            )
-        return Outcome(False, failure_message(kind, detail, ms), failure=kind, result=res)
+            kind = classify(error=res.error, snapshot=snap, verdict=verdict, clicks=res.clicks)
+            if record:
+                self._record(spec, res, ok=False, kind=kind)
+            if res.error is not None:
+                detail = res.error.detail
+            elif kind == "network" and snap is not None:
+                detail = f"Cloudflare origin error {snap.status}"
+            else:
+                detail = verdict.reason if verdict is not None else ""
+            domain = registrable_domain(p.url)
+            log.info("solve failed: domain=%s kind=%s plugin=%s", domain, kind, res.plugin)
+            if record:
+                self._hook(
+                    "failure",
+                    FailureReport(
+                        url=p.url, domain=domain, kind=kind, detail=detail, plugin=res.plugin, result=res,
+                        session=bool(p.session),
+                    ),
+                )
+            return Outcome(False, failure_message(kind, detail, ms), failure=kind, result=res)
 
     async def replay(
         self,

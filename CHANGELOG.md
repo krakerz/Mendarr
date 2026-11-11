@@ -5,10 +5,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-## [0.6.0] — 2026-11-11
+## [0.7.0] — 2026-11-11
 
 ### Added
 - Dashboard overview shows live in-progress automated solves and healer rounds with domain, details, elapsed time, and 3-second htmx polling.
+
+## [0.6.0] — 2026-11-11
 
 ## [0.5.7] — 2026-11-11
 
