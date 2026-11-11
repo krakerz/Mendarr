@@ -268,3 +268,18 @@ async def test_clear_finished(parts):
     cleared = m.clear_finished()
     assert cleared == 2
     assert list(m._sessions.keys()) == ["s1"]
+
+
+async def test_explicit_finish(parts):
+    iid = incident(parts[0])
+    w = FakeManualWorker([state(clear_snap())])
+    m = manager(parts, w)
+    s = await m.start(iid)
+    # Manual session does not auto-solve without challenge_seen
+    await asyncio.sleep(0.05)
+    assert s.active and w.finished == 0
+    # Explicit user finish succeeds and caches cookies
+    assert await m.finish(s.id) is True
+    assert s.status == "solved" and w.finished == 1
+    cached = parts[1].get("example.org", "203.0.113.7")
+    assert cached and cached.cookies

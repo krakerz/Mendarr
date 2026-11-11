@@ -25,6 +25,7 @@ class StubManager:
         self.items = {"m1": sess(), "m2": sess("solved", "m2")}
         self.error: ManualError | None = None
         self.cancelled: list[str] = []
+        self.finished: list[str] = []
 
     async def start(self, iid):
         if self.error:
@@ -58,6 +59,9 @@ class StubManager:
 
     async def cancel(self, sid):
         self.cancelled.append(sid)
+
+    async def finish(self, sid):
+        self.finished.append(sid)
 
 
 @pytest.fixture
@@ -127,6 +131,7 @@ def test_session_page(ui_client, stub):
     assert 'data-slot="1"' in r.text
     assert "/ui/static/js/manual.js" in r.text
     assert "/ui/manual/m1/cancel" in r.text
+    assert "/ui/manual/m1/finish" in r.text
     assert "Backend:" in r.text
 
 
@@ -156,6 +161,12 @@ def test_cancel(ui_client, stub):
     r = post(ui_client, "/ui/manual/m1/cancel")
     assert r.status_code == 303
     assert stub.cancelled == ["m1"]
+
+
+def test_finish(ui_client, stub):
+    r = post(ui_client, "/ui/manual/m1/finish")
+    assert r.status_code == 303
+    assert stub.finished == ["m1"]
 
 
 def test_unknown_sid(ui_client, stub):

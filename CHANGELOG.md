@@ -5,6 +5,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.5.5] — 2026-11-11
+
+### Fixed
+- Fixed manual solve race condition where the backend watcher auto-closed the browser context and killed the VNC stream after 3 seconds when no challenge was detected.
+- Fixed premature navigation by waiting for the VNC WebSocket client to connect before navigating to the target URL, ensuring the user sees the page load live.
+
+### Added
+- Added an explicit "Finish & Capture" button in the Manual Solve dashboard so users can capture clearance cookies and demonstration traces on demand.
+
 ## [0.5.4] — 2026-11-11
 
 ### Fixed

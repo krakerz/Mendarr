@@ -75,6 +75,14 @@ async def manual_status(request: Request, sid: str) -> Response:
     return resp
 
 
+@router.post("/manual/{sid}/finish")
+async def finish_manual(request: Request, sid: str) -> Response:
+    if _session(request, sid) is None:
+        return error_page(request, 404, "Unknown manual solve session.")
+    await _manager(request).finish(sid)
+    return _go(request, f"/ui/manual/{sid}")
+
+
 @router.post("/manual/{sid}/cancel")
 async def cancel_manual(request: Request, sid: str) -> Response:
     if _session(request, sid) is None:

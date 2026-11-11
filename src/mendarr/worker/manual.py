@@ -41,6 +41,7 @@ class _Session:
     challenge_seen: bool = False
     lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     ended: asyncio.Event = field(default_factory=asyncio.Event)
+    vnc_connected: asyncio.Event = field(default_factory=asyncio.Event)
     tasks: list[asyncio.Task] = field(default_factory=list)
 
 
@@ -100,6 +101,9 @@ class ManualSessions:
 
     async def _goto(self, s: _Session) -> None:
         try:
+            # Give the user's VNC client up to 8s to connect first so the human sees the initial navigation
+            with contextlib.suppress(TimeoutError, asyncio.TimeoutError):
+                await asyncio.wait_for(s.vnc_connected.wait(), timeout=8.0)
             await s.page.goto(s.url, wait_until="domcontentloaded", timeout=30_000)
         except Exception as e:
             log.info("manual %s: initial navigation: %s", s.id, e)
