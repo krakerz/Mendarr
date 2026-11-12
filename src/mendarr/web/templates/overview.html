@@ -8,7 +8,9 @@
     <p class="page-sub">Solver health per domain, refreshed every 15 s.</p>
   </div>
 </header>
-<div id="overview" hx-get="/ui" hx-select="#overview" hx-swap="outerHTML" hx-trigger="every 15s">
+{# hx-disinherit: the inner pollers (/ui/active, /ui/egress) must not inherit hx-select="#overview", or their
+   fragments select nothing and the In progress table vanishes on every 3 s poll #}
+<div id="overview" hx-get="/ui" hx-select="#overview" hx-swap="outerHTML" hx-trigger="every 15s" hx-disinherit="hx-select">
   <div class="stats">
     <div class="stat">
       <div class="stat-top"><span class="stat-label">In progress</span><span class="stat-icon {{ 'accent' if active_items else '' }}">{{ m.icon("refresh-cw", "spin" if active_items else "") }}</span></div>

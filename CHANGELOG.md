@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-11-12
+
+### Fixed
+- The overview's "In progress" table no longer disappears on every 3 s refresh while a solve is running: its poll inherited the overview's `hx-select`. It now shows while something is in progress and hides when nothing is.
+
 ## [0.7.1] — 2026-11-11
 
 ### Fixed
