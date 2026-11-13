@@ -91,6 +91,18 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 }
 .user-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .user-row form { margin: 0; }
+.update-card {
+  margin: 0 0 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--accent-soft); display: flex; flex-direction: column; gap: 8px; font-size: 0.8125rem;
+}
+.update-card[hidden] { display: none; }
+.update-card + .update-card { margin-top: 4px; }
+.update-title { display: flex; align-items: flex-start; gap: 8px; color: var(--fg); line-height: 1.35; }
+.update-title .icon { flex: none; margin-top: 1px; color: var(--accent); }
+.update-title span { min-width: 0; overflow-wrap: anywhere; }
+.update-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.update-warn { background: var(--amber-bg); }
+.update-warn .update-title .icon { color: var(--amber); }
 .version { padding: 0 8px; font-size: 0.75rem; color: var(--muted); }
 
 .content { min-width: 0; padding: 32px 40px 48px; }
@@ -103,7 +115,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
     padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto;
   }
   .brand { margin: 0 8px 0 0; }
-  .brand span:last-child, .nav-label, .version, .user-name, .avatar { display: none; }
+  .brand span:last-child, .nav-label, .version, .update-card, .user-name, .avatar { display: none; }
   .nav-link { flex: none; }
   .sidebar-foot { margin: 0 0 0 auto; padding: 0; border: 0; }
   .content { padding: 20px 16px 40px; }

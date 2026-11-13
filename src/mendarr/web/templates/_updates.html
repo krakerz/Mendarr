@@ -1,0 +1,16 @@
+{% import "_macros.html" as m with context %}
+{% if u.update_available %}
+<div class="update-card" data-update-card="{{ u.latest }}" hidden>
+  <div class="update-title">{{ m.icon("circle-arrow-up") }}<span>New version available <strong>{{ u.latest }}</strong></span></div>
+  <div class="update-actions">
+    <button type="button" class="btn btn-ghost btn-sm" data-update-dismiss>Dismiss</button>
+    {% if u.url %}<a class="btn btn-sm" href="{{ u.url }}" target="_blank" rel="noopener noreferrer">See what's new</a>{% endif %}
+  </div>
+</div>
+{% endif %}
+{% if u.worker_mismatch %}
+{# not dismissible: API and worker on different versions is a setup problem, not news #}
+<div class="update-card update-warn" role="status">
+  <div class="update-title">{{ m.icon("triangle-alert") }}<span>Browser worker is on <strong>{{ u.worker_version }}</strong>, API on <strong>{{ u.current }}</strong></span></div>
+</div>
+{% endif %}

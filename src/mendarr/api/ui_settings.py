@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 
 from mendarr.api.auth import require_user
-from mendarr.healer.config import HealerConfig, parse
+from mendarr.healer.config import MIN_UPDATE_S, HealerConfig, parse, parse_duration, update_policy
 from mendarr.healer.llm import LlmClient
 from mendarr.healer.notify import TITLES, Notice, Notifier
 from mendarr.web import error_page, render, templates
@@ -23,7 +23,7 @@ router = APIRouter(dependencies=[Depends(require_user)])
 _LOCK = threading.Lock()
 _NAME = re.compile(r"^[a-z0-9][a-z0-9_-]{0,31}$")
 _SECRET = re.compile(r"^\$\{[A-Za-z_][A-Za-z0-9_]*\}$")
-_EVENTS = ("healed", "manual", "rollback", "default_proposed", "gave_up", "agent_wanted")
+_EVENTS = ("healed", "manual", "rollback", "default_proposed", "gave_up", "agent_wanted", "update_available")
 _CHANNELS = ("discord", "webhook")
 _BROKEN = "Fix the file in Raw YAML first"
 
@@ -148,6 +148,8 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
     heal_raw = raw.get("healer") if isinstance(raw.get("healer"), dict) else {}
     notify_raw = raw.get("notify") if isinstance(raw.get("notify"), dict) else {}
     cookies_raw = raw.get("cookies") if isinstance(raw.get("cookies"), dict) else {}
+    updates_raw = raw.get("updates") if isinstance(raw.get("updates"), dict) else {}
+    upd_enabled, upd_interval, _ = update_policy(st, cfg)
     windows = esc_raw.get("heal_windows")
     if not isinstance(windows, list):
         windows = [_fmt_dur(w) for w in cfg.escalation.heal_windows]
@@ -184,6 +186,12 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
             "refresh_idle_days": cookies_raw.get("refresh_idle_days", ""),
             "env_interval": st.cookie_refresh_interval,
             "env_idle": st.cookie_refresh_idle_days,
+        },
+        "updates": {
+            "enabled": upd_enabled,
+            "interval": updates_raw.get("interval", _fmt_dur(upd_interval)),
+            "env_interval": st.update_check_interval,
+            "view": request.app.state.updates.snapshot(),
         },
         "events": _EVENTS,
         "titles": TITLES,
@@ -339,6 +347,39 @@ async def cookies(request: Request) -> Response:
         sec["refresh_idle_days"] = value
 
     return await _edit(request, mutate, "Saved the cookie settings", "cookies")
+
+
+@router.post("/settings/updates")
+async def updates_save(request: Request) -> Response:
+    def mutate(raw: dict, form) -> None:
+        sec = _section(raw, "updates")
+        sec["check"] = _flag(form, "check")
+        value = str(form.get("interval", "")).strip()
+        if not value:
+            sec.pop("interval", None)
+            return
+        try:
+            seconds = parse_duration(value)
+        except ValueError as e:
+            raise _Bad(str(e)) from None
+        if seconds < MIN_UPDATE_S:
+            raise _Bad("Check interval must be at least 1h")
+        sec["interval"] = value
+
+    return await _edit(request, mutate, "Saved the update settings", "updates")
+
+
+@router.post("/settings/updates/check")
+async def updates_check(request: Request) -> Response:
+    checker = request.app.state.updates
+    if not checker.snapshot().enabled:
+        return RedirectResponse(f"/ui/settings?err={quote('Update checks are switched off')}#updates", status_code=303)
+    view = await checker.check_now()
+    if view.status == "error":
+        return RedirectResponse(f"/ui/settings?err={quote('Update check failed: ' + view.error)}#updates", status_code=303)
+    if view.update_available:
+        return _saved(f"Mendarr {view.latest} is available", "updates")
+    return _saved("Mendarr is up to date", "updates")
 
 
 @router.post("/settings/notify")

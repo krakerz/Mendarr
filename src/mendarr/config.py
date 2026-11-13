@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     # background re-check of cached cookies: "6h", "90m", "1h"; empty or 0 = off (mendarr.yml `cookies:` overrides both)
     cookie_refresh_interval: str = ""
     cookie_refresh_idle_days: float = 7.0
+    # update checker: asks GitHub for the latest published release (mendarr.yml `updates:` overrides both)
+    update_check: bool = True
+    update_check_interval: str = "24h"  # minimum 1h
+    # for testing only: where the latest release is read from (GitHub's "latest release" JSON shape)
+    update_releases_url: str = "https://api.github.com/repos/krakerz/mendarr/releases/latest"
     # FlareSolverr always returns {} here; real headers (Content-Encoding etc.) can confuse clients
     return_headers: bool = False
 

@@ -10,6 +10,7 @@ Mendarr is a drop-in replacement for FlareSolverr designed to reliably bypass Cl
 
 - **FlareSolverr Drop-in Replacement**: Fully compatible `/v1` endpoint (`request.get`, `request.post`, sessions) for Prowlarr, Jackett, and custom scrapers.
 - **Smart Cookie Cache**: Fast path reuse of validated clearance cookies without spawning heavy browser instances.
+- **Update Checker**: Shows a "New version available" card in the dashboard when a newer release is published, and can ping Discord or a webhook once per new version (opt-in event). Off with `MENDARR_UPDATE_CHECK=false`. It asks GitHub for the latest published release, which sends your public IP to GitHub once per interval.
 - **Background Cookie Refresher**: Optionally re-checks cached cookies on a schedule and re-solves challenged domains in the background. Background checks and solves always leave one browser slot free for real requests; the last check result is kept across restarts.
 - **Multi-Engine Stealth Backends**:
   - `camoufox`: Firefox with fingerprint injection and GeoIP matching.
@@ -109,6 +110,9 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_COOKIE_MAX_TTL_HOURS` | `6` | Hard cap on a cached entry's lifetime in hours. `0` or `auto` = no cap: the entry lives as long as its `cf_clearance` cookie (24 h when that cookie has no expiry) |
 | `MENDARR_COOKIE_REFRESH_INTERVAL` | empty | How often cached cookies are re-checked in the background (`6h`, `90m`). `0` or empty = off. Also on the Settings page. The first round runs 60 s after start |
 | `MENDARR_COOKIE_REFRESH_IDLE_DAYS` | `7` | Stop re-checking a domain that has not been requested for this many days |
+| `MENDARR_UPDATE_CHECK` | `true` | Check GitHub for a newer published release and show a "New version available" card in the dashboard. `false` = no requests at all. Also on the Settings page |
+| `MENDARR_UPDATE_CHECK_INTERVAL` | `24h` | How often to check (`12h`, `1d`); minimum `1h`. The first check runs 60 s after start |
+| `MENDARR_UPDATE_RELEASES_URL` | GitHub's latest-release API URL of Mendarr | For testing only: read the latest release from this URL instead (same JSON shape: `tag_name`, `html_url`, `published_at`) |
 | `MENDARR_PROXY_URL` | empty | Upstream proxy URL (`http://`, `https://`, `socks5://`) |
 | `MENDARR_PROXY_USERNAME` | empty | Username for upstream proxy (alternative to URL embedding) |
 | `MENDARR_PROXY_PASSWORD` | empty | Password for upstream proxy |
@@ -145,6 +149,10 @@ llm:
 cookies:
   refresh_interval: 6h     # 0 = off; overrides MENDARR_COOKIE_REFRESH_INTERVAL
   refresh_idle_days: 7
+
+updates:
+  check: true              # overrides MENDARR_UPDATE_CHECK
+  interval: 24h            # minimum 1h; overrides MENDARR_UPDATE_CHECK_INTERVAL
 
 notify:
   discord_webhook: "${DISCORD_WEBHOOK_URL}"

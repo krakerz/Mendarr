@@ -1,5 +1,6 @@
 import time
 
+from mendarr import __version__
 from mendarr.rpc import (
     CheckRequest,
     CheckResult,
@@ -11,6 +12,7 @@ from mendarr.rpc import (
     SolveRequest,
     SolveResult,
     WorkerError,
+    WorkerInfo,
 )
 
 UA = "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0"
@@ -49,6 +51,7 @@ class FakeWorker:
         self.ua = UA
         self.egress_ip = "203.0.113.7"
         self.egress_country: str | None = None
+        self.version = __version__
         self.solve_results: list[SolveResult] = []
         self.check_results: list[CheckResult] = []
         self.sessions: dict[str, SessionCreate] = {}
@@ -58,6 +61,9 @@ class FakeWorker:
 
     async def user_agent(self) -> str:
         return self.ua
+
+    async def info(self) -> WorkerInfo:
+        return WorkerInfo(user_agent=self.ua, slots=2, version=self.version)
 
     async def solve(self, req: SolveRequest) -> SolveResult:
         self.calls.append(("solve", req))

@@ -86,6 +86,7 @@ class NotifyEvents(_Model):
     default_proposed: bool = True
     gave_up: bool = False
     agent_wanted: bool = True  # only fires with escalation.agent_tier on
+    update_available: bool = False  # opt-in
 
 
 class NotifyConfig(_Model):
@@ -150,12 +151,18 @@ class CookieConfig(_Model):
     refresh_idle_days: float | None = Field(None, ge=0)  # None = MENDARR_COOKIE_REFRESH_IDLE_DAYS
 
 
+class UpdatesConfig(_Model):
+    check: bool | None = None  # None = MENDARR_UPDATE_CHECK
+    interval: Duration | None = None  # None = MENDARR_UPDATE_CHECK_INTERVAL
+
+
 class HealerConfig(_Model):
     healer: HealerTuning = HealerTuning()
     escalation: Escalation = Escalation()
     llm: LlmConfig = LlmConfig()
     notify: NotifyConfig = NotifyConfig()
     cookies: CookieConfig = CookieConfig()
+    updates: UpdatesConfig = UpdatesConfig()
     domains: dict[str, DomainOverride] = {}
 
     def for_domain(self, domain: str) -> DomainPolicy:
@@ -202,6 +209,25 @@ def refresh_policy(settings: Settings, cfg: HealerConfig) -> tuple[float, float]
         interval = max(interval, MIN_REFRESH_S)
     idle = c.refresh_idle_days if c.refresh_idle_days is not None else settings.cookie_refresh_idle_days
     return interval, idle
+
+
+MIN_UPDATE_S = 3600.0
+DEFAULT_UPDATE_S = 86400.0
+
+
+def update_policy(settings: Settings, cfg: HealerConfig) -> tuple[bool, float, float]:
+    """(enabled, interval_s clamped to MIN_UPDATE_S, interval_s as configured) for the update checker."""
+    u = cfg.updates
+    enabled = settings.update_check if u.check is None else u.check
+    if u.interval is not None:
+        raw = u.interval
+    else:
+        try:
+            raw = parse_duration(settings.update_check_interval or DEFAULT_UPDATE_S)
+        except ValueError:
+            log.error("MENDARR_UPDATE_CHECK_INTERVAL=%r is not a duration; using 24h", settings.update_check_interval)
+            raw = DEFAULT_UPDATE_S
+    return enabled, max(raw, MIN_UPDATE_S), raw
 
 
 class ConfigFile:

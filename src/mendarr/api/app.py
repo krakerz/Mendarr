@@ -1,6 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 
+import httpx
 import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -22,6 +23,7 @@ from mendarr.core.router import Router
 from mendarr.core.stats import DomainStats, StatsHooks
 from mendarr.core.traces import TraceStore
 from mendarr.core.tracker import SolveTracker
+from mendarr.core.updates import UpdateChecker
 from mendarr.healer.config import ConfigFile, config_path
 from mendarr.healer.loop import Healer
 from mendarr.healer.notify import Notifier
@@ -35,6 +37,7 @@ def create_app(
     worker: WorkerClient | None = None,
     cache: CookieCache | None = None,
     store: PluginStore | None = None,
+    update_transport: httpx.AsyncBaseTransport | None = None,  # tests: fake GitHub
 ) -> FastAPI:
     settings = settings or Settings()
     worker = worker or HttpWorkerClient(settings.worker_url, token=settings.worker_token)
@@ -62,14 +65,19 @@ def create_app(
     )
     router.manual = manual
     refresher = Refresher(settings, router, cache, worker, config_file, manual)
+    update_notifier = Notifier(public_url=settings.public_url)
+    updates = UpdateChecker(settings, config_file, worker, update_notifier, transport=update_transport)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         healer.start()
         refresher.start()
+        updates.start()
         try:
             yield
         finally:
+            await updates.stop()
+            await update_notifier.aclose()
             await refresher.stop()
             await healer.stop()
             await manual.aclose()
@@ -91,6 +99,7 @@ def create_app(
     app.state.stats = stats
     app.state.tracker = tracker
     app.state.refresher = refresher
+    app.state.updates = updates
     app.state.auth = Auth.from_settings(settings)
     app.state.user_agent = ""
     app.include_router(v1_router)
