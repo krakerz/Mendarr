@@ -44,7 +44,7 @@
     {% if rows %}
     <div class="table-wrap">
       <table class="data">
-        <thead><tr><th>Domain</th><th class="num">Solves 24 h</th><th class="num">7 d</th><th>Last</th><th>Active plugin</th><th>Cookie expiry</th><th>Incidents</th></tr></thead>
+        <thead><tr><th>Domain</th><th class="num">Solves 24 h</th><th class="num">7 d</th><th>Last</th><th>Active plugin</th><th>Cookies</th><th>Incidents</th></tr></thead>
         <tbody>
         {% for r in rows %}
         <tr>
@@ -53,7 +53,7 @@
           <td class="num">{% if r.week %}{{ pct(r.week.ok, r.week.fail) }} <span class="muted">{{ r.week.ok }}/{{ r.week.total }}</span>{% else %}<span class="muted">—</span>{% endif %}</td>
           <td class="nowrap">{{ (r.week.last_at if r.week else None)|ago }}</td>
           <td><a class="mono" href="/ui/plugins/{{ r.scope }}">{{ r.plugin }}</a>{% if r.fallback %} <span class="muted">(fallback)</span>{% endif %}</td>
-          <td class="nowrap">{% if r.cookie_expires %}{{ r.cookie_expires|ago }}{% if r.cookie_expires < now %} {{ m.badge("expired") }}{% endif %}{% else %}<span class="muted">—</span>{% endif %}</td>
+          <td class="nowrap">{% if r.cookie_expires %}{{ r.cookie_expires|ago }}{% if r.cookie_expires < now %} {{ m.badge("expired") }}{% endif %}{% elif r.last and r.last[0] == "no_challenge" %}<span class="muted" title="Last request passed without a challenge ({{ r.last[1]|ago }})">no challenge</span>{% else %}<span class="muted">—</span>{% endif %}{% if r.mismatch %} <span class="muted" title="Cache check was challenged but the browser saw no challenge">check≠browser ×{{ r.mismatch }}</span>{% endif %}</td>
           <td><span class="row">{% for i in r.incidents %}<a href="/ui/incidents/{{ i.id }}">#{{ i.id }}</a> {{ m.badge(i.state) }}{% else %}<span class="muted">—</span>{% endfor %}</span></td>
         </tr>
         {% endfor %}

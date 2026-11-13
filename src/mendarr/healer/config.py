@@ -8,7 +8,14 @@ from pathlib import Path
 from typing import Annotated, Literal
 
 import yaml
-from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    BeforeValidator,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_validator,
+)
 
 from mendarr.config import Settings
 
@@ -138,11 +145,17 @@ class DomainPolicy:
     trace_keep: int
 
 
+class CookieConfig(_Model):
+    refresh_interval: Duration | None = None  # None = MENDARR_COOKIE_REFRESH_INTERVAL; 0 = off
+    refresh_idle_days: float | None = Field(None, ge=0)  # None = MENDARR_COOKIE_REFRESH_IDLE_DAYS
+
+
 class HealerConfig(_Model):
     healer: HealerTuning = HealerTuning()
     escalation: Escalation = Escalation()
     llm: LlmConfig = LlmConfig()
     notify: NotifyConfig = NotifyConfig()
+    cookies: CookieConfig = CookieConfig()
     domains: dict[str, DomainOverride] = {}
 
     def for_domain(self, domain: str) -> DomainPolicy:
@@ -166,6 +179,29 @@ def parse(text: str) -> HealerConfig:
     if not isinstance(data, dict):
         raise ValueError("top level must be a mapping")
     return HealerConfig.model_validate(_expand(data))
+
+
+MIN_REFRESH_S = 10.0
+
+
+def refresh_policy(settings: Settings, cfg: HealerConfig) -> tuple[float, float]:
+    """(interval_s, idle_days) for the cookie refresher; interval 0 = off."""
+    c = cfg.cookies
+    if c.refresh_interval is not None:
+        interval = c.refresh_interval
+    else:
+        try:
+            interval = parse_duration(settings.cookie_refresh_interval or 0)
+        except ValueError:
+            log.error(
+                "MENDARR_COOKIE_REFRESH_INTERVAL=%r is not a duration; refresher off",
+                settings.cookie_refresh_interval,
+            )
+            interval = 0.0
+    if interval > 0:
+        interval = max(interval, MIN_REFRESH_S)
+    idle = c.refresh_idle_days if c.refresh_idle_days is not None else settings.cookie_refresh_idle_days
+    return interval, idle
 
 
 class ConfigFile:

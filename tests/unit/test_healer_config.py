@@ -3,7 +3,14 @@ import os
 import pytest
 from pydantic import ValidationError
 
-from mendarr.healer.config import ConfigFile, HealerConfig, parse, parse_duration
+from mendarr.config import Settings
+from mendarr.healer.config import (
+    ConfigFile,
+    HealerConfig,
+    parse,
+    parse_duration,
+    refresh_policy,
+)
 
 
 @pytest.mark.parametrize(
@@ -68,3 +75,17 @@ def test_config_file_reload(tmp_path):
     path.write_text("healer: [garbage")
     os.utime(path, (path.stat().st_mtime + 5, path.stat().st_mtime + 5))
     assert cf.get().healer.poll_s == 3
+
+
+def test_refresh_policy(monkeypatch):
+    monkeypatch.delenv("MENDARR_COOKIE_REFRESH_INTERVAL", raising=False)
+    monkeypatch.delenv("MENDARR_COOKIE_REFRESH_IDLE_DAYS", raising=False)
+    assert refresh_policy(Settings(), HealerConfig()) == (0.0, 7.0)
+    env = Settings(cookie_refresh_interval="1h", cookie_refresh_idle_days=3)
+    assert refresh_policy(env, HealerConfig()) == (3600.0, 3.0)
+    cfg = parse("cookies: {refresh_interval: 90m, refresh_idle_days: 1}")
+    assert cfg.cookies.refresh_interval == 5400
+    assert refresh_policy(env, cfg) == (5400.0, 1.0)
+    assert refresh_policy(env, parse("cookies: {refresh_interval: 0}"))[0] == 0.0
+    assert refresh_policy(Settings(cookie_refresh_interval="1s"), HealerConfig())[0] == 10.0
+    assert refresh_policy(Settings(cookie_refresh_interval="soon"), HealerConfig())[0] == 0.0

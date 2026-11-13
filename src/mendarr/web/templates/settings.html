@@ -144,6 +144,25 @@
     <p class="muted" style="margin-top: 14px; font-size: 0.8125rem;">Per-domain escalation overrides can be configured directly in Raw YAML below.</p>
   </section>
 
+  <section id="cookies" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("settings") }} Cookie refresh</h2>
+    </div>
+    <form method="post" action="/ui/settings/cookies" class="form-grid">
+      {{ m.csrf_field() }}
+      <label>Refresh interval</label>
+      <div>
+        <input name="refresh_interval" value="{{ cookies.refresh_interval }}" placeholder="{{ cookies.env_interval or 'off' }}">
+        <div class="muted" style="font-size: 0.8125rem;">6h, 90m, 0 = off; empty uses the environment value</div>
+      </div>
+      <label>Idle days</label><input name="refresh_idle_days" value="{{ cookies.refresh_idle_days }}" placeholder="{{ cookies.env_idle }}">
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save cookie settings</button>
+      </div>
+    </form>
+  </section>
+
   <section id="notify" class="card">
     <div class="card-head">
       <h2>{{ m.icon("bell") }} Notifications</h2>

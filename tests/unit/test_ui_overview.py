@@ -85,3 +85,46 @@ def test_active_solves_empty_and_populated(ui_client):
     assert st.tracker.count() == 0
     r_after = ui_client.get("/ui/active")
     assert "active-site.com" not in r_after.text
+
+
+def test_no_challenge_row_and_mismatch(ui_client):
+    st = ui_client.app.state
+    st.stats.set_last("quiet.example", "no_challenge")
+    st.stats.set_last("busy.example", "solved")
+    st.stats.bump("quiet.example", "check_mismatch")
+    st.stats.bump("quiet.example", "check_mismatch")
+    page = ui_client.get("/ui").text
+    assert "quiet.example" in page and "no challenge" in page
+    assert "check≠browser ×2" in page
+    assert "busy.example" not in page
+
+
+def test_egress_card_stale(ui_client, monkeypatch):
+    from mendarr.rpc import EgressInfo
+
+    async def stale():
+        return EgressInfo(ip="1.2.3.4", checked_at=time.time() - 120, stale=True)
+
+    monkeypatch.setattr(ui_client.app.state.worker, "egress", stale)
+    r = ui_client.get("/ui/egress")
+    assert "stale" in r.text and "1.2.3.4" in r.text
+
+
+def test_cookies_page_per_cookie_expiry_and_checks(ui_client):
+    st = ui_client.app.state
+    now = time.time()
+    st.cache.put(
+        "example.org",
+        "direct",
+        "UA",
+        [
+            Cookie(name="cf_clearance", value="SECRETVALUE", domain="example.org", expires=now + 3600),
+            Cookie(name="sessid", value="SESSVALUE", domain="example.org", expires=0),
+        ],
+    )
+    page = ui_client.get("/ui/cookies").text
+    assert "cf_clearance" in page and "sessid" in page and "session" in page and "sets lifetime" in page
+    assert "SECRETVALUE" not in page and "SESSVALUE" not in page
+    assert "Last check" in page and "Next check" in page
+    st.cache.set_check("example.org", "solved")
+    assert "solved" in ui_client.get("/ui/cookies").text

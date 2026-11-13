@@ -27,11 +27,13 @@
         <th>Cached Cookies</th>
         <th class="nowrap" style="width: 160px;">Solved</th>
         <th class="nowrap" style="width: 110px;">Expires</th>
+        <th class="nowrap" style="width: 150px;">Last check</th>
+        <th class="nowrap" style="width: 110px;">Next check</th>
         <th class="actions-cell"></th>
       </tr>
     </thead>
     <tbody>
-    {% for e in entries %}
+    {% for r in rows %}{% set e = r.entry %}
     <tr>
       <td class="cell-main mono">{{ e.domain }}</td>
       <td class="nowrap">
@@ -49,18 +51,22 @@
       </td>
       <td>
         <div class="cookie-pills">
-          {% for c in e.cookies %}
-          {% if c.name == "cf_clearance" %}
-          <span class="cookie-pill clearance" title="Cloudflare clearance token">{{ c.name }}</span>
-          {% else %}
-          <span class="cookie-pill generic">{{ c.name }}</span>
-          {% endif %}
+          {% for c in r.cookies %}
+          <span class="cookie-pill {{ 'clearance' if c.name == 'cf_clearance' else 'generic' }}"{% if c.sets_lifetime %} title="This cookie sets the entry's lifetime"{% endif %}>{{ c.name }}
+            <span class="muted">{% if c.expired %}{{ m.badge("expired") }}{% elif c.session %}session{% else %}{{ c.expires|ago }}{% endif %}</span>{% if c.sets_lifetime %} <span class="muted">· sets lifetime</span>{% endif %}
+          </span>
           {% endfor %}
         </div>
       </td>
       <td class="nowrap muted" style="font-size: 0.8125rem;">{{ e.solved_at|ts }}</td>
       <td class="nowrap" style="font-size: 0.8125rem;">
         {{ e.expires_at|ago }}{% if e.expires_at < now %} {{ m.badge("expired") }}{% endif %}
+      </td>
+      <td class="nowrap" style="font-size: 0.8125rem;">
+        {% if r.check_at %}{{ r.check_at|ts }} {{ m.badge(r.check_result) if r.check_result else "" }}{% else %}<span class="muted">—</span>{% endif %}
+      </td>
+      <td class="nowrap" style="font-size: 0.8125rem;">
+        {% if refresh_on %}{{ next_at[e.domain]|ago }}{% else %}<span class="muted">off</span>{% endif %}
       </td>
       <td class="actions-cell">
         <form method="post" action="/ui/cookies/purge" onsubmit="return confirm('Purge cookies for {{ e.domain|e }}?')">

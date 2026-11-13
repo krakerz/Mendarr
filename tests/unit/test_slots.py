@@ -98,3 +98,27 @@ async def test_close_closes_browsers():
     await pool.browser(1)
     await pool.close()
     assert launched[0][2] == [1]
+
+
+async def test_has_free_with_all_slots_held():
+    pool, _ = make_pool(2)
+    assert pool.has_free()
+    async with pool.acquire(), pool.acquire():
+        assert not pool.has_free()
+    assert pool.has_free()
+
+
+async def test_background_ok_keeps_one_slot_spare():
+    pool, _ = make_pool(3)
+    assert pool.background_ok()
+    async with pool.acquire():
+        assert pool.background_ok()  # 2 free
+        async with pool.acquire():
+            assert not pool.background_ok()  # 1 free: kept for real requests
+
+
+async def test_background_ok_single_slot():
+    pool, _ = make_pool(1)
+    assert pool.background_ok()
+    async with pool.acquire():
+        assert not pool.background_ok()

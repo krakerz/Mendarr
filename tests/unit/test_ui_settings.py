@@ -110,3 +110,17 @@ def test_credentials_card_renders(ui_client):
     assert "Credentials / Dashboard User" in r.text
     assert "MENDARR_UI_USER" in r.text
     assert "MENDARR_UI_PASSWORD" in r.text
+
+
+def test_cookie_settings(ui_client):
+    page = ui_client.get("/ui/settings").text
+    assert 'action="/ui/settings/cookies"' in page
+    r = _post(ui_client, "/ui/settings/cookies", refresh_interval="6h", refresh_idle_days="3")
+    assert r.status_code == 303
+    assert _read(ui_client)["cookies"] == {"refresh_interval": "6h", "refresh_idle_days": 3.0}
+    assert 'name="refresh_interval" value="6h"' in ui_client.get("/ui/settings").text
+    _post(ui_client, "/ui/settings/cookies", refresh_interval="", refresh_idle_days="")
+    assert _read(ui_client)["cookies"] == {}
+    assert _post(ui_client, "/ui/settings/cookies", refresh_idle_days="x").status_code == 400
+    assert _post(ui_client, "/ui/settings/cookies", refresh_idle_days="-1").status_code == 400
+    assert _post(ui_client, "/ui/settings/cookies", refresh_interval="soon").status_code == 400

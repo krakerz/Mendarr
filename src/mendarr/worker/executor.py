@@ -78,6 +78,13 @@ class Executor:
                 backend,
             )
             backend = backends.DEFAULT_BACKEND
+        if req.background and not self.pool.background_ok():
+            log.debug("background solve for %s skipped: no spare slot", req.url.split("?")[0])
+            return SolveResult(
+                plugin=plugin.ref,
+                egress=egress,
+                error=WorkerError(type="no_slot", detail="No free browser slot for a background solve"),
+            )
         slot_held = False
         try:
             async with asyncio.timeout(req.timeout_s):

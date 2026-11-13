@@ -10,6 +10,7 @@ Mendarr is a drop-in replacement for FlareSolverr designed to reliably bypass Cl
 
 - **FlareSolverr Drop-in Replacement**: Fully compatible `/v1` endpoint (`request.get`, `request.post`, sessions) for Prowlarr, Jackett, and custom scrapers.
 - **Smart Cookie Cache**: Fast path reuse of validated clearance cookies without spawning heavy browser instances.
+- **Background Cookie Refresher**: Optionally re-checks cached cookies on a schedule and re-solves challenged domains in the background. Background checks and solves always leave one browser slot free for real requests; the last check result is kept across restarts.
 - **Multi-Engine Stealth Backends**:
   - `camoufox`: Firefox with fingerprint injection and GeoIP matching.
   - `patchright`: Hardened Chromium driver bypassing CDP leaks.
@@ -97,7 +98,7 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_HOST` | `0.0.0.0` | API bind address |
 | `MENDARR_PORT` | `8191` | API listening port |
 | `MENDARR_DATA_DIR` | `/data` | Directory for database, plugins, and trace storage |
-| `MENDARR_LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warning`, `error`) |
+| `MENDARR_LOG_LEVEL` | `info` | Logging verbosity (`debug`, `info`, `warning`, `error`). `debug` is verbose for Mendarr itself only; libraries stay at `info` |
 | `MENDARR_WORKER_URL` | `http://127.0.0.1:8192` | URL of the browser worker service |
 | `MENDARR_WORKER_TOKEN` | empty | Shared bearer token between API and worker container |
 | `MENDARR_SLOTS` | `2` | Number of concurrent browser slots on the worker |
@@ -105,7 +106,9 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_UI_PASSWORD` | empty | Dashboard password |
 | `MENDARR_PUBLIC_URL` | empty | Public base URL (e.g. `http://mendarr.lan:8191`) for links in alerts |
 | `MENDARR_COOKIE_CACHE` | `true` | Enable fast-path clearance cookie caching |
-| `MENDARR_COOKIE_MAX_TTL_HOURS` | `6` | Maximum lifespan of cached clearance cookies in hours |
+| `MENDARR_COOKIE_MAX_TTL_HOURS` | `6` | Hard cap on a cached entry's lifetime in hours. `0` or `auto` = no cap: the entry lives as long as its `cf_clearance` cookie (24 h when that cookie has no expiry) |
+| `MENDARR_COOKIE_REFRESH_INTERVAL` | empty | How often cached cookies are re-checked in the background (`6h`, `90m`). `0` or empty = off. Also on the Settings page. The first round runs 60 s after start |
+| `MENDARR_COOKIE_REFRESH_IDLE_DAYS` | `7` | Stop re-checking a domain that has not been requested for this many days |
 | `MENDARR_PROXY_URL` | empty | Upstream proxy URL (`http://`, `https://`, `socks5://`) |
 | `MENDARR_PROXY_USERNAME` | empty | Username for upstream proxy (alternative to URL embedding) |
 | `MENDARR_PROXY_PASSWORD` | empty | Password for upstream proxy |
@@ -138,6 +141,10 @@ llm:
       model: "gemma-4-26b-a4b"
       api_key: "${MENDARR_LLM_KEY}"
       vision: true
+
+cookies:
+  refresh_interval: 6h     # 0 = off; overrides MENDARR_COOKIE_REFRESH_INTERVAL
+  refresh_idle_days: 7
 
 notify:
   discord_webhook: "${DISCORD_WEBHOOK_URL}"

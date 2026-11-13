@@ -7,19 +7,21 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Literal, Protocol
+from urllib.parse import urlsplit
 
 from mendarr.api.flaresolverr import MSG_NOT_DETECTED, MSG_SOLVED, failure_message
 from mendarr.api.worker_client import WorkerClient, WorkerUnavailable
 from mendarr.config import Settings
 from mendarr.core.classify import FailureKind, classify
-from mendarr.core.cookies import CookieCache
+from mendarr.core.cookies import CacheEntry, CookieCache, lifetime_cookie
 from mendarr.core.domains import hostname, registrable_domain
 from mendarr.core.judge import judge
+from mendarr.core.stats import CHECK_MISMATCH, DomainStats
 from mendarr.core.traces import FailureReport
 from mendarr.core.tracker import SolveTracker
 from mendarr.plugins.store import PluginStore, RollbackEvent
 from mendarr.proxy import redact
-from mendarr.rpc import CheckRequest, Cookie, PluginSpec, ProxySpec, SolveRequest, SolveResult
+from mendarr.rpc import CheckRequest, Cookie, PluginSpec, ProxySpec, Snapshot, SolveRequest, SolveResult
 
 log = logging.getLogger(__name__)
 
@@ -54,6 +56,9 @@ class Outcome:
     turnstile_token: str | None = None
     failure: FailureKind | None = None
     result: SolveResult | None = None  # the worker's raw result (healer: replay traces)
+    via: str = ""  # cache_hit | no_challenge | solved | failed:<kind> | held
+    plugin: str = ""
+    egress: str = ""
 
 
 def _req_cookies(p: V1Params) -> list[Cookie]:
@@ -96,6 +101,7 @@ class Router:
         store: PluginStore | None = None,
         hooks: RouterHooks | None = None,
         tracker: SolveTracker | None = None,
+        stats: DomainStats | None = None,
     ) -> None:
         self._settings = settings
         self._worker = worker
@@ -105,8 +111,29 @@ class Router:
         self.hooks = hooks  # set after construction by create_app (healer needs the router)
         self.manual: ManualHold | None = None  # set by create_app
         self.tracker = tracker
+        self._stats = stats
 
     async def request(self, p: V1Params) -> Outcome:
+        t0 = self._clock()
+        out = await self._request(p)
+        domain = registrable_domain(p.url)
+        log.info(
+            "request: domain=%s url=%s via=%s elapsed=%.1fs plugin=%s egress=%s",
+            domain, urlsplit(p.url).path or "/", out.via, self._clock() - t0, out.plugin or "-", out.egress or "-",
+        )
+        if out.via != "held":
+            self._stats_call("set_last", domain, out.via)
+        return out
+
+    def _stats_call(self, method: str, *args: str) -> None:
+        if self._stats is None:
+            return
+        try:
+            getattr(self._stats, method)(*args)
+        except sqlite3.Error:
+            log.exception("stats write failed")
+
+    async def _request(self, p: V1Params) -> Outcome:
         deadline = self._clock() + p.max_timeout_ms / 1000
 
         def remaining() -> float:
@@ -117,47 +144,43 @@ class Router:
             if self.manual.should_hold(domain):
                 log.info("holding request for %s until a manual solve", domain)
                 if not await self.manual.wait(domain, max(remaining() - 1, 0)):
-                    return Outcome(False, failure_message("timeout", "", p.max_timeout_ms), failure="timeout")
+                    return Outcome(
+                        False, failure_message("timeout", "", p.max_timeout_ms), failure="timeout", via="held"
+                    )
 
         use_cache = self._settings.cookie_cache and not p.session and not p.return_screenshot
         if use_cache:
-            cached = await self._try_cache(p, remaining)
+            cached, challenged = await self._try_cache(p, remaining)
             if cached is not None:
                 return cached
+            out = await self._solve(p, remaining, use_cache)
+            if challenged and out.via == "no_challenge":
+                self._stats_call("bump", registrable_domain(p.url), CHECK_MISMATCH)
+            return out
         return await self._solve(p, remaining, use_cache)
 
-    async def _try_cache(self, p: V1Params, remaining: Callable[[], float]) -> Outcome | None:
+    async def _try_cache(self, p: V1Params, remaining: Callable[[], float]) -> tuple[Outcome | None, bool]:
+        """(hit, check was challenged)."""
         domain = registrable_domain(p.url)
         try:
             egress = f"proxy:{redact(p.proxy.url)}" if p.proxy else (await self._worker.egress()).ip
         except (WorkerUnavailable, TimeoutError):
-            return None
+            return None, False
+        self._cache.touch(domain, p.url)
         entry = self._cache.get(domain, egress)
         if entry is None or remaining() < 3:
-            return None
-        try:
-            res = await self._worker.check(
-                CheckRequest(
-                    method=p.method,
-                    url=p.url,
-                    post_data=p.post_data,
-                    cookies=entry.cookies + _req_cookies(p),
-                    user_agent=entry.ua,
-                    proxy=p.proxy,
-                    timeout_s=min(15, remaining() - 1),
-                )
-            )
-        except (WorkerUnavailable, TimeoutError):
-            return None
-        # an error (UA mismatch, site down, deadline) says nothing about the cookies: keep the entry
-        if res.error is not None or res.snapshot is None:
-            return None
-        snap = res.snapshot
-        if not judge(snap, challenge_seen=False).ok:
+            log.debug("cache miss: domain=%s egress=%s", domain, egress)
+            return None, False
+        snap, challenged = await self._check(entry, p, min(15, remaining() - 1), cookies=_req_cookies(p))
+        if challenged:
+            log.debug("cache entry for %s was challenged; dropping it", domain)
             self._cache.drop(domain, egress, entry.ua)
-            return None
+            return None, True
+        if snap is None:
+            return None, False
         merged = _merge(entry.cookies, snap.cookies)
-        self._cache.put(domain, egress, entry.ua, merged)
+        stored = self._cache.put(domain, egress, entry.ua, merged)
+        log.debug("cache hit: domain=%s egress=%s", domain, egress)
         return Outcome(
             ok=True,
             message=MSG_NOT_DETECTED,
@@ -165,9 +188,38 @@ class Router:
             status=snap.status,
             headers=snap.headers,
             html=snap.html,
-            cookies=merged,
+            cookies=stored.cookies if stored else merged,
             user_agent=entry.ua,
-        )
+            via="cache_hit",
+            egress=egress,
+        ), False
+
+    async def _check(
+        self, entry: CacheEntry, p: V1Params, timeout_s: float, *, cookies: list[Cookie], background: bool = False
+    ) -> tuple[Snapshot | None, bool]:
+        """Probe the cached cookies: (snapshot when clean, challenged). (None, False) = inconclusive."""
+        try:
+            res = await self._worker.check(
+                CheckRequest(
+                    method=p.method,
+                    url=p.url,
+                    post_data=p.post_data,
+                    cookies=entry.cookies + cookies,
+                    user_agent=entry.ua,
+                    proxy=p.proxy,
+                    timeout_s=timeout_s,
+                    background=background,
+                )
+            )
+        except (WorkerUnavailable, TimeoutError):
+            return None, False
+        # an error (UA mismatch, site down, deadline, no slot) says nothing about the cookies: keep the entry
+        if res.error is not None or res.snapshot is None:
+            log.debug("cache check for %s inconclusive: %s", entry.domain, res.error.type if res.error else "no snapshot")
+            return None, False
+        if not judge(res.snapshot, challenge_seen=False).ok:
+            return None, True
+        return res.snapshot, False
 
     async def _solve(
         self,
@@ -177,13 +229,24 @@ class Router:
         *,
         spec: PluginSpec | None = None,
         record: bool = True,
+        background_of: CacheEntry | None = None,
     ) -> Outcome:
+        background = background_of is not None
         ms = p.max_timeout_ms
         if spec is None:
             spec = self._resolve_plugin(p.url)
         domain = registrable_domain(p.url)
         track_ctx = (
-            self.tracker.track("solve", domain, p.url, description=spec.ref if spec else "resolving")
+            self.tracker.track(
+                "solve",
+                domain,
+                p.url,
+                description=f"cookie refresh: {spec.ref if spec else 'resolving'}"
+                if background
+                else spec.ref
+                if spec
+                else "resolving",
+            )
             if self.tracker is not None and record
             else contextlib.nullcontext()
         )
@@ -204,22 +267,35 @@ class Router:
                         screenshot=p.return_screenshot,
                         plugin=spec,
                         trace=True,
+                        background=background,
                     )
                 )
             except TimeoutError:
-                return Outcome(False, failure_message("timeout", "", ms), failure="timeout")
+                return Outcome(False, failure_message("timeout", "", ms), failure="timeout", via="failed:timeout")
             except WorkerUnavailable as e:
-                return Outcome(False, failure_message("network", f"Worker unavailable: {e}", ms), failure="network")
+                return Outcome(
+                    False,
+                    failure_message("network", f"Worker unavailable: {e}", ms),
+                    failure="network",
+                    via="failed:network",
+                )
 
             snap = res.snapshot
             verdict = judge(snap, challenge_seen=res.challenge_seen) if res.error is None and snap else None
             if verdict is not None and verdict.ok and snap is not None:
-                if record:
+                if record and not background:
                     self._record(spec, res, ok=True)
                     if res.challenge_seen:
                         self._hook("success", registrable_domain(p.url))
                 if res.challenge_seen and use_cache:
-                    self._cache.put(registrable_domain(p.url), res.egress, res.user_agent, snap.cookies)
+                    self._cache.put(
+                        registrable_domain(p.url),
+                        res.egress,
+                        res.user_agent,
+                        snap.cookies,
+                        url=p.url,
+                        last_used=background_of.last_used if background_of else None,
+                    )
                 return Outcome(
                     ok=True,
                     message=MSG_SOLVED if res.challenge_seen else MSG_NOT_DETECTED,
@@ -232,10 +308,13 @@ class Router:
                     screenshot_b64=res.screenshot_b64,
                     turnstile_token=res.turnstile_token,
                     result=res,
+                    via="solved" if res.challenge_seen else "no_challenge",
+                    plugin=res.plugin,
+                    egress=res.egress,
                 )
 
             kind = classify(error=res.error, snapshot=snap, verdict=verdict, clicks=res.clicks)
-            if record:
+            if record and not background:
                 self._record(spec, res, ok=False, kind=kind)
             if res.error is not None:
                 detail = res.error.detail
@@ -245,15 +324,60 @@ class Router:
                 detail = verdict.reason if verdict is not None else ""
             domain = registrable_domain(p.url)
             log.info("solve failed: domain=%s kind=%s plugin=%s", domain, kind, res.plugin)
-            if record:
+            if record and not (background and res.error is not None and res.error.type == "no_slot"):
                 self._hook(
                     "failure",
                     FailureReport(
                         url=p.url, domain=domain, kind=kind, detail=detail, plugin=res.plugin, result=res,
-                        session=bool(p.session),
+                        session=bool(p.session), background=background,
                     ),
                 )
-            return Outcome(False, failure_message(kind, detail, ms), failure=kind, result=res)
+            return Outcome(
+                False,
+                failure_message(kind, detail, ms),
+                failure=kind,
+                result=res,
+                via=f"failed:{kind}",
+                plugin=res.plugin,
+                egress=res.egress,
+            )
+
+    async def refresh(self, entry: CacheEntry, *, renew_before: float) -> str:
+        """Background re-check of one cached entry (cookie refresher). Returns the status word shown on the page."""
+        p = V1Params(
+            url=entry.url, method="GET", post_data=None, max_timeout_ms=60000, cookies=[], proxy=None,
+            session=None, session_ttl_minutes=None, return_only_cookies=False, return_screenshot=False,
+            disable_media=False, wait_s=0,
+        )
+        deadline = self._clock() + p.max_timeout_ms / 1000
+
+        def remaining() -> float:
+            return deadline - self._clock()
+
+        snap, challenged = await self._check(entry, p, min(15, remaining() - 1), cookies=[], background=True)
+        if challenged:
+            out = await self._solve(p, remaining, True, background_of=entry)
+            if out.result is not None and out.result.error is not None and out.result.error.type == "no_slot":
+                return "no_slot"  # keep the entry for the next round
+            if out.via == "solved":
+                if (out.egress, out.user_agent) != (entry.egress, entry.ua):
+                    self._cache.drop(entry.domain, entry.egress, entry.ua)
+                return "solved"
+            self._cache.drop(entry.domain, entry.egress, entry.ua)
+            if out.ok:
+                self._stats_call("bump", entry.domain, CHECK_MISMATCH)
+                return "no_challenge"
+            return "solve_failed"
+        if snap is None:
+            return "error"
+        stored = self._cache.put(entry.domain, entry.egress, entry.ua, _merge(entry.cookies, snap.cookies))
+        if stored is not None and lifetime_cookie(stored) == "cf_clearance" and stored.expires_at < renew_before:
+            out = await self._solve(p, remaining, True, background_of=stored)
+            if out.via == "solved":
+                return "renewed"
+            if out.result is not None and out.result.error is not None and out.result.error.type == "no_slot":
+                return "no_slot"
+        return "ok"
 
     async def replay(
         self,

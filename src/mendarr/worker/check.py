@@ -105,7 +105,9 @@ class CookieChecker:
                 ]
         except Exception as e:
             detail = describe_failure(str(e), req.proxy or self._upstream)
+            log.debug("check: %s %s -> %s", req.method, req.url.split("?")[0], type(e).__name__)
             return CheckResult(error=WorkerError(type="navigation", detail=detail), mode="curl")
+        log.debug("check: %s %s -> %s", req.method, req.url.split("?")[0], r.status_code)
         merged = {c.name: c for c in req.cookies}
         merged.update({c.name: c for c in jar})
         snap = Snapshot(
@@ -119,6 +121,12 @@ class CookieChecker:
         return CheckResult(snapshot=snap, mode="curl")
 
     async def _check_browser(self, req: CheckRequest) -> CheckResult:
+        if req.background and not self._pool.background_ok():
+            log.debug("background check for %s skipped: no spare browser slot", req.url.split("?")[0])
+            return CheckResult(
+                error=WorkerError(type="no_slot", detail="No free browser slot for a background check"),
+                mode="browser",
+            )
         async with asyncio.timeout(req.timeout_s):
             async with self._pool.acquire() as slot:
                 ua = self._pool.user_agent(slot)

@@ -147,6 +147,7 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
     esc_raw = raw.get("escalation") if isinstance(raw.get("escalation"), dict) else {}
     heal_raw = raw.get("healer") if isinstance(raw.get("healer"), dict) else {}
     notify_raw = raw.get("notify") if isinstance(raw.get("notify"), dict) else {}
+    cookies_raw = raw.get("cookies") if isinstance(raw.get("cookies"), dict) else {}
     windows = esc_raw.get("heal_windows")
     if not isinstance(windows, list):
         windows = [_fmt_dur(w) for w in cfg.escalation.heal_windows]
@@ -177,6 +178,12 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
         "secrets": {
             "discord": _secret_state(notify_raw.get("discord_webhook")),
             "webhook": _secret_state(notify_raw.get("webhook_url")),
+        },
+        "cookies": {
+            "refresh_interval": cookies_raw.get("refresh_interval", ""),
+            "refresh_idle_days": cookies_raw.get("refresh_idle_days", ""),
+            "env_interval": st.cookie_refresh_interval,
+            "env_idle": st.cookie_refresh_idle_days,
         },
         "events": _EVENTS,
         "titles": TITLES,
@@ -312,6 +319,26 @@ async def budgets(request: Request) -> Response:
             _opt(healer, key, str(form.get(key, "")))
 
     return await _edit(request, mutate, "Saved the budgets", "budgets")
+
+
+@router.post("/settings/cookies")
+async def cookies(request: Request) -> Response:
+    def mutate(raw: dict, form) -> None:
+        sec = _section(raw, "cookies")
+        _opt(sec, "refresh_interval", str(form.get("refresh_interval", "")))
+        days = str(form.get("refresh_idle_days", "")).strip()
+        if not days:
+            sec.pop("refresh_idle_days", None)
+            return
+        try:
+            value = float(days)
+        except ValueError:
+            raise _Bad("Idle days must be a number") from None
+        if value < 0:
+            raise _Bad("Idle days must be 0 or more")
+        sec["refresh_idle_days"] = value
+
+    return await _edit(request, mutate, "Saved the cookie settings", "cookies")
 
 
 @router.post("/settings/notify")
