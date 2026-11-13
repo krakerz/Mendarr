@@ -14,7 +14,7 @@ from mendarr.healer.config import NotifyConfig
 
 log = logging.getLogger(__name__)
 
-Event = Literal["healed", "manual", "rollback", "default_proposed", "gave_up", "agent_wanted"]
+Event = Literal["healed", "manual", "rollback", "default_proposed", "gave_up", "agent_wanted", "update_available"]
 TITLES = {
     "healed": "Healed",
     "manual": "Needs a manual solve",
@@ -22,6 +22,7 @@ TITLES = {
     "default_proposed": "New _default proposed",
     "gave_up": "Gave up",
     "agent_wanted": "Waiting for an agent",
+    "update_available": "Update available",
 }
 COLORS = {
     "healed": 0x2E7D32,
@@ -30,6 +31,7 @@ COLORS = {
     "default_proposed": 0x1565C0,
     "gave_up": 0x616161,
     "agent_wanted": 0x6A1B9A,
+    "update_available": 0x00897B,
 }
 
 
@@ -42,6 +44,7 @@ class Notice:
     kind: str = ""
     plugin: str = ""
     screenshot: bytes | None = None
+    url: str = ""  # overrides the dashboard link
 
 
 class Notifier:
@@ -50,6 +53,8 @@ class Notifier:
         self._http = httpx.AsyncClient(transport=transport)
 
     def link(self, n: Notice) -> str:
+        if n.url:
+            return n.url
         if self._public_url and n.incident_id is not None:
             return f"{self._public_url}/ui/incidents/{n.incident_id}"
         return self._public_url

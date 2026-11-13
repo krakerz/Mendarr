@@ -37,6 +37,7 @@
     <a class="nav-link{% if active|default('') == key %} active{% endif %}" href="{{ href }}"{% if active|default('') == key %} aria-current="page"{% endif %}>{{ m.icon(ic) }}<span>{{ label }}</span></a>
     {% endfor %}
     <div class="sidebar-foot">
+      <div id="update-slot" hx-get="/ui/updates" hx-trigger="load" hx-swap="innerHTML"></div>
       <div class="user-row">
         <span class="avatar">{{ user[:1] }}</span>
         <span class="user-name">{{ user }}</span>
@@ -64,6 +65,29 @@
 {% endif %}
 {% endblock %}
 {% block scripts %}
+<script>
+  // Update card (GET /ui/updates, stored state only). "Dismiss" hides it for that version only; a newer
+  // version shows it again. Storage can be blocked, so every access is wrapped.
+  (function () {
+    var KEY = "mendarr.update.dismissed";
+    function read() { try { return localStorage.getItem(KEY) || ""; } catch (e) { return ""; } }
+    function sync(root) {
+      root.querySelectorAll("[data-update-card]").forEach(function (card) {
+        card.hidden = card.getAttribute("data-update-card") === read();
+      });
+    }
+    document.addEventListener("htmx:afterSwap", function (e) {
+      if (e.target && e.target.id === "update-slot") { sync(e.target); }
+    });
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest && e.target.closest("[data-update-dismiss]");
+      if (!btn) { return; }
+      var card = btn.closest("[data-update-card]");
+      try { localStorage.setItem(KEY, card.getAttribute("data-update-card")); } catch (err) { /* private mode */ }
+      card.hidden = true;
+    });
+  })();
+</script>
 <script>
   // The dashboard egress card is refreshed through htmx (GET /ui/egress), but htmx 2.0 does
   // not swap `hx-trigger="load"` responses for elements present on first paint, so the card

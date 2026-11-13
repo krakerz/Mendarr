@@ -163,6 +163,46 @@
     </form>
   </section>
 
+  <section id="updates" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("circle-arrow-up") }} Updates</h2>
+    </div>
+    <form method="post" action="/ui/settings/updates" class="form-grid">
+      {{ m.csrf_field() }}
+      <label>Check for updates</label>
+      <div class="checks">
+        <label><input type="checkbox" name="check"{% if updates.enabled %} checked{% endif %}> Ask GitHub for the latest published release (sends your public IP to GitHub once per interval)</label>
+      </div>
+      <label>Check interval</label>
+      <div>
+        <input name="interval" value="{{ updates.interval }}" placeholder="{{ updates.env_interval or '24h' }}">
+        <div class="muted" style="font-size: 0.8125rem;">12h, 1d; minimum 1h; empty uses the environment value</div>
+      </div>
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save update settings</button>
+      </div>
+    </form>
+    {% set v = updates.view %}
+    <div class="card" style="background: var(--surface-2); border-color: var(--border); margin-top: 20px;">
+      <div class="row" style="justify-content: space-between;">
+        <div>
+          <div style="font-weight: 500; font-size: 0.875rem;">
+            {% if v.status == "update" %}New version {{ v.latest }} available (this is {{ v.current }})
+            {% elif v.status == "current" %}Up to date ({{ v.current }}; latest release {{ v.latest }})
+            {% elif v.status == "error" %}Error: {{ v.error }}
+            {% else %}Not checked yet{% endif %}
+          </div>
+          <div class="muted" style="font-size: 0.8125rem;">Last check: {{ v.last_check_at|ts }}{% if v.latest %} · latest found: {{ v.latest }}{% endif %}{% if v.url %} · <a href="{{ v.url }}" target="_blank" rel="noopener noreferrer">release notes</a>{% endif %}</div>
+        </div>
+        <form method="post" action="/ui/settings/updates/check">
+          {{ m.csrf_field() }}
+          <button class="btn btn-sm"{% if not v.enabled %} disabled{% endif %}>{{ m.icon("refresh-cw") }} Check now</button>
+        </form>
+      </div>
+    </div>
+  </section>
+
   <section id="notify" class="card">
     <div class="card-head">
       <h2>{{ m.icon("bell") }} Notifications</h2>

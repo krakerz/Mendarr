@@ -91,6 +91,18 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
 }
 .user-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
 .user-row form { margin: 0; }
+.update-card {
+  margin: 0 0 4px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--accent-soft); display: flex; flex-direction: column; gap: 8px; font-size: 0.8125rem;
+}
+.update-card[hidden] { display: none; }
+.update-card + .update-card { margin-top: 4px; }
+.update-title { display: flex; align-items: flex-start; gap: 8px; color: var(--fg); line-height: 1.35; }
+.update-title .icon { flex: none; margin-top: 1px; color: var(--accent); }
+.update-title span { min-width: 0; overflow-wrap: anywhere; }
+.update-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+.update-warn { background: var(--amber-bg); }
+.update-warn .update-title .icon { color: var(--amber); }
 .version { padding: 0 8px; font-size: 0.75rem; color: var(--muted); }
 
 .content { min-width: 0; padding: 32px 40px 48px; }
@@ -103,7 +115,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
     padding: 8px 12px; border-right: 0; border-bottom: 1px solid var(--border); overflow-x: auto;
   }
   .brand { margin: 0 8px 0 0; }
-  .brand span:last-child, .nav-label, .version, .user-name, .avatar { display: none; }
+  .brand span:last-child, .nav-label, .version, .update-card, .user-name, .avatar { display: none; }
   .nav-link { flex: none; }
   .sidebar-foot { margin: 0 0 0 auto; padding: 0; border: 0; }
   .content { padding: 20px 16px 40px; }
@@ -182,7 +194,7 @@ table.data tr.bad:hover td { background: var(--red-bg); }
 .cell-main { font-weight: 500; color: var(--fg); }
 table.data code { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
 .cookie-pills { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.cookie-pill { display: inline-flex; align-items: center; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); white-space: nowrap; line-height: 1.4; }
+.cookie-pill { display: inline-flex; align-items: center; gap: 0.5ch; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); white-space: nowrap; line-height: 1.4; }
 .cookie-pill.clearance { background: var(--green-bg); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 35%, transparent); font-weight: 600; }
 .cookie-pill.generic { background: var(--surface-3); color: var(--muted); border: 1px solid var(--border); }
 details table.data { margin-top: 8px; }
@@ -367,3 +379,13 @@ dl.kv dt:last-of-type, dl.kv dd:last-of-type { border-bottom: 0; }
 .auth-form { display: flex; flex-direction: column; gap: 16px; }
 .auth-form .btn { margin-top: 8px; }
 .auth-foot { margin-top: 20px; text-align: center; font-size: 0.75rem; color: var(--muted); }
+
+/* Scrollbars: slim accent thumb, no track. Chrome ignores ::-webkit-scrollbar once the standard properties are
+   set, so those are for Firefox only (thin + colours is all it supports). */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 45%, transparent) transparent; }
+}

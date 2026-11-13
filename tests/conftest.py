@@ -8,6 +8,12 @@ from mendarr.api.app import create_app
 from mendarr.config import Settings
 
 
+@pytest.fixture(autouse=True)
+def _no_update_check(monkeypatch):
+    """Tests never ask GitHub: the checker is off unless a test switches it on with a fake transport."""
+    monkeypatch.setenv("MENDARR_UPDATE_CHECK", "false")
+
+
 @pytest.fixture
 def fake_worker() -> FakeWorker:
     return FakeWorker()

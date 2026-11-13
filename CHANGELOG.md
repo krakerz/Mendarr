@@ -5,6 +5,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.9.0] — 2026-11-13
+
+### Added
+- Update checker: a "New version available" card in the dashboard sidebar (dismiss it per version, or open the release notes), a warning when the browser worker runs a different version than the API, and an optional "Update available" Discord/webhook notification (off by default, sent once per version). It asks GitHub for the latest published release once per interval, which sends your public IP to GitHub; turn it off with `MENDARR_UPDATE_CHECK=false`. `MENDARR_UPDATE_CHECK_INTERVAL` (default `24h`, minimum `1h`), `updates:` in `mendarr.yml` and an "Updates" section on the Settings page with a "Check now" button.
+
+## [0.8.1] — 2026-11-13
+
+### Fixed
+- Cookie labels on the Cookies page lost the spaces between the cookie name, its expiry and "sets lifetime" (e.g. "cf_clearancein 364d").
+
+### Changed
+- Slim scrollbars in the dashboard's accent colour instead of the browser's default grey bars (Firefox shows a thin bar in the same colours).
+
 ## [0.8.0] — 2026-11-13
 
 ### Added

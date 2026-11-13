@@ -135,6 +135,13 @@ async def egress_card(request: Request) -> Response:
     return render(request, "_egress.html", ip=ip, proxy=proxy, country=country, stale=stale, checked_at=checked_at)
 
 
+@router.get("/updates", dependencies=AUTH)
+async def updates_card(request: Request) -> Response:
+    """Sidebar card, loaded by htmx. Reads stored state only; never asks GitHub."""
+    view = await request.app.state.updates.view()
+    return render(request, "_updates.html", u=view)
+
+
 @router.get("/cookies", dependencies=AUTH)
 def cookies_page(request: Request) -> Response:
     st = request.app.state
