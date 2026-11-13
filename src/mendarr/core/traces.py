@@ -39,6 +39,7 @@ class FailureReport:
     plugin: str  # SolveResult.plugin ref
     result: SolveResult | None
     session: bool = False
+    background: bool = False  # cookie-refresher solve: opens an incident, never counts in stats
 
 
 @dataclass(frozen=True)

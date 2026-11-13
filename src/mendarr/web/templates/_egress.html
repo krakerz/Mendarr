@@ -17,7 +17,9 @@
   <span class="egress-ip">{{ ip }}</span>
 </div>
 <div class="stat-sub" title="{% if proxy %}via {{ proxy }}{% else %}direct connection{% endif %}">
-  {% if proxy %}
+  {% if stale %}
+    <span class="egress-route" title="The last lookup failed; showing the last known address"><span class="egress-dot grey"></span><span>stale · checked {{ checked_at|ago }}</span></span>
+  {% elif proxy %}
     <span class="egress-route"><span class="egress-dot green"></span><span class="truncate">via {{ proxy | replace("http://", "") | replace("https://", "") }}</span></span>
   {% elif ip in ("unknown", "worker unavailable") %}
     <span class="egress-route"><span class="egress-dot grey"></span><span>unavailable</span></span>

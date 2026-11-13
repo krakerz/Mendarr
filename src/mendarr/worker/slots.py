@@ -30,6 +30,14 @@ class SlotPool:
     def indexes(self) -> list[int]:
         return list(self._indexes)
 
+    def has_free(self) -> bool:
+        return len(self._busy) < len(self._indexes)
+
+    def background_ok(self) -> bool:
+        # a background job leaves one slot free for real requests (unless there is only one slot)
+        free = len(self._indexes) - len(self._busy)
+        return free >= 2 or (len(self._indexes) == 1 and free == 1)
+
     @asynccontextmanager
     async def acquire(self, slot: int | None = None) -> AsyncIterator[int]:
         # Callers bound the wait with asyncio.timeout

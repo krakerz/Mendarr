@@ -57,3 +57,29 @@ def test_upstream_proxy_in_info_and_egress():
 def test_bad_proxy_fails_create_app():
     with pytest.raises(ProxyConfigError):
         create_app(Settings(slots=1, proxy_url="h"), launcher=fake_launcher, start_displays=False)
+
+
+def test_egress_answers_while_the_lookup_hangs(monkeypatch):
+    import asyncio
+
+    import httpx
+
+    class Hanging:
+        def __init__(self, **kw):
+            pass
+
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *a):
+            return None
+
+        async def get(self, url):
+            await asyncio.sleep(3600)
+
+    monkeypatch.setattr(httpx, "AsyncClient", Hanging)
+    settings = Settings(slots=1, egress_check_url="http://lookup.invalid/ip", egress_country_url="")
+    app = create_app(settings, launcher=fake_launcher, start_displays=False)
+    with TestClient(app) as c:
+        r = c.get("/egress")
+        assert r.json()["ip"] == "unknown"

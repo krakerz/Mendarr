@@ -10,6 +10,9 @@ from fastapi.responses import RedirectResponse, Response
 from mendarr.api import ui_incidents, ui_plugins, ui_settings
 from mendarr.api.auth import COOKIE, Auth, require_user, safe_next
 from mendarr.api.worker_client import WorkerUnavailable
+from mendarr.core.cookies import lifetime_cookie
+from mendarr.core.stats import CHECK_MISMATCH
+from mendarr.healer.config import refresh_policy
 from mendarr.plugins.store import DEFAULT_SCOPE, OPEN_INCIDENTS
 from mendarr.web import render
 
@@ -75,7 +78,11 @@ def overview(request: Request) -> Response:
     cookies = st.cache.entries()
     incidents = [i for i in st.store.incidents() if i["state"] in OPEN_INCIDENTS]
     scopes = {p.scope for p in st.store.list() if p.scope != DEFAULT_SCOPE}
-    domains = sorted(set(week) | {c.domain for c in cookies} | scopes | {i["domain"] for i in incidents})
+    last = st.stats.last()
+    mismatch = st.stats.counters(CHECK_MISMATCH)
+    # domains that never showed a challenge have no solve stats; the last-outcome table keeps them listed
+    quiet = {d for d, (outcome, at) in last.items() if outcome == "no_challenge" and at >= now - 7 * 86400}
+    domains = sorted(set(week) | {c.domain for c in cookies} | scopes | {i["domain"] for i in incidents} | quiet)
     rows = []
     for d in domains:
         plugin = st.store.resolve(d)
@@ -89,6 +96,8 @@ def overview(request: Request) -> Response:
                 "fallback": plugin.scope == DEFAULT_SCOPE,
                 "cookie_expires": max((c.expires_at for c in cookies if c.domain == d), default=None),
                 "incidents": [i for i in incidents if i["domain"] == d],
+                "last": last.get(d),
+                "mismatch": mismatch.get(d, 0),
             }
         )
     cfg = st.config_file.get()
@@ -120,16 +129,47 @@ async def egress_card(request: Request) -> Response:
     """Overview card, loaded by htmx so a slow egress lookup never delays the page."""
     try:
         info = await request.app.state.worker.egress()
-        ip, proxy, country = info.ip, info.proxy, info.country
+        ip, proxy, country, stale, checked_at = info.ip, info.proxy, info.country, info.stale, info.checked_at
     except (WorkerUnavailable, TimeoutError):
-        ip, proxy, country = "worker unavailable", None, None
-    return render(request, "_egress.html", ip=ip, proxy=proxy, country=country)
+        ip, proxy, country, stale, checked_at = "worker unavailable", None, None, False, 0
+    return render(request, "_egress.html", ip=ip, proxy=proxy, country=country, stale=stale, checked_at=checked_at)
 
 
 @router.get("/cookies", dependencies=AUTH)
 def cookies_page(request: Request) -> Response:
+    st = request.app.state
+    now = time.time()
+    interval_s, _ = refresh_policy(st.settings, st.config_file.get())
+    rows = []
+    for e in st.cache.entries():
+        lifetime = lifetime_cookie(e)
+        rows.append(
+            {
+                "entry": e,
+                "cookies": [
+                    {
+                        "name": c.name,
+                        "expires": c.expires if c.expires > 0 else None,
+                        "session": c.expires <= 0,
+                        "expired": 0 < c.expires <= now,
+                        "sets_lifetime": c.name == lifetime,
+                    }
+                    for c in e.cookies
+                ],
+                "check_at": e.last_check_at or None,
+                "check_result": e.last_check_result,
+            }
+        )
+    # every domain is checked in the refresher's next round; without a running refresher, estimate from the policy
+    next_at = {}
+    if interval_s > 0:
+        round_at = getattr(getattr(request.app.state, "refresher", None), "next_at", None)
+        for r in rows:
+            e = r["entry"]
+            next_at[e.domain] = round_at or max(now, (e.last_check_at or now) + interval_s)
     return render(
-        request, "cookies.html", active="cookies", entries=request.app.state.cache.entries(), now=time.time()
+        request, "cookies.html", active="cookies", rows=rows, entries=[r["entry"] for r in rows], now=now,
+        refresh_on=interval_s > 0, next_at=next_at,
     )
 
 

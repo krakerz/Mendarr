@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from mendarr.proxy import UpstreamProxy, parse_upstream
@@ -24,7 +24,11 @@ class Settings(BaseSettings):
 
     # API
     cookie_cache: bool = True
+    # 0 or "auto" = no cap: an entry lives as long as its cf_clearance cookie
     cookie_max_ttl_hours: float = 6.0
+    # background re-check of cached cookies: "6h", "90m", "1h"; empty or 0 = off (mendarr.yml `cookies:` overrides both)
+    cookie_refresh_interval: str = ""
+    cookie_refresh_idle_days: float = 7.0
     # FlareSolverr always returns {} here; real headers (Content-Encoding etc.) can confuse clients
     return_headers: bool = False
 
@@ -71,6 +75,11 @@ class Settings(BaseSettings):
     # MCP (/mcp): tier-2 healing by external agents; no token = MCP is off
     mcp_token: str = ""  # one bearer token, or several comma-separated (one per agent, each rate-limited)
     mcp_replays_per_hour: int = 30  # test_plugin + submit_plugin replays per token; 0 = unlimited
+
+    @field_validator("cookie_max_ttl_hours", mode="before")
+    @classmethod
+    def _auto_ttl(cls, v: object) -> object:
+        return 0 if isinstance(v, str) and v.strip().lower() in ("", "auto") else v
 
     @property
     def upstream(self) -> UpstreamProxy | None:

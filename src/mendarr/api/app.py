@@ -1,4 +1,3 @@
-import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -6,7 +5,7 @@ import uvicorn
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
-from mendarr import __version__
+from mendarr import __version__, logsetup
 from mendarr.api.auth import Auth
 from mendarr.api.flaresolverr import FLARESOLVERR_VERSION
 from mendarr.api.mcp_server import mount_mcp
@@ -18,6 +17,7 @@ from mendarr.api.worker_client import HttpWorkerClient, WorkerClient
 from mendarr.config import Settings
 from mendarr.core.cookies import CookieCache
 from mendarr.core.manual import ManualManager
+from mendarr.core.refresher import Refresher
 from mendarr.core.router import Router
 from mendarr.core.stats import DomainStats, StatsHooks
 from mendarr.core.traces import TraceStore
@@ -46,7 +46,7 @@ def create_app(
     traces = TraceStore.open(Path(settings.data_dir) / "traces")
     config_file = ConfigFile(config_path(settings))
     tracker = SolveTracker()
-    router = Router(settings, worker, cache, store=store, tracker=tracker)
+    router = Router(settings, worker, cache, store=store, tracker=tracker, stats=stats)
     healer = Healer(
         settings, store, router, traces, config_file, notifier=Notifier(public_url=settings.public_url), tracker=tracker
     )
@@ -61,13 +61,16 @@ def create_app(
         plugin_resolver=router._resolve_plugin,
     )
     router.manual = manual
+    refresher = Refresher(settings, router, cache, worker, config_file, manual)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
         healer.start()
+        refresher.start()
         try:
             yield
         finally:
+            await refresher.stop()
             await healer.stop()
             await manual.aclose()
             await worker.aclose()
@@ -87,6 +90,7 @@ def create_app(
     app.state.config_file = config_file
     app.state.stats = stats
     app.state.tracker = tracker
+    app.state.refresher = refresher
     app.state.auth = Auth.from_settings(settings)
     app.state.user_agent = ""
     app.include_router(v1_router)
@@ -118,5 +122,5 @@ def create_app(
 
 def main() -> None:
     s = Settings()
-    logging.basicConfig(level=s.log_level.upper())
-    uvicorn.run(create_app(s), host=s.host, port=s.port, log_level=s.log_level)
+    uv_level = logsetup.configure(s.log_level)
+    uvicorn.run(create_app(s), host=s.host, port=s.port, log_level=uv_level)

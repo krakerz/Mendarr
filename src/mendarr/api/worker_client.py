@@ -1,5 +1,7 @@
 """API -> worker HTTP client. Endpoints mirror worker/server.py."""
 
+import logging
+import time
 from typing import Protocol
 
 import httpx
@@ -21,6 +23,9 @@ from mendarr.rpc import (
     SolveResult,
     WorkerInfo,
 )
+
+
+log = logging.getLogger("mendarr.api.worker_client")
 
 
 class WorkerUnavailable(Exception):
@@ -60,12 +65,14 @@ class HttpWorkerClient:
         kwargs: dict = {"json": json}
         if timeout is not None:
             kwargs["timeout"] = timeout
+        t0 = time.monotonic()
         try:
             r = await self._http.request(method, path, **kwargs)
         except httpx.TimeoutException as e:
             raise TimeoutError(str(e)) from e
         except httpx.TransportError as e:
             raise WorkerUnavailable(str(e) or type(e).__name__) from e
+        log.debug("worker %s %s -> %s in %.2fs", method, path, r.status_code, time.monotonic() - t0)
         if not r.is_success:
             raise WorkerRejected(r.status_code, f"worker answered {r.status_code} on {method} {path}")
         try:

@@ -56,3 +56,21 @@ def test_proxy_credentials_env(monkeypatch):
     monkeypatch.setenv("MENDARR_PROXY_PASSWORD", "pw")
     up = Settings().upstream
     assert (up.username, up.password) == ("u", "pw")
+
+
+def test_cookie_ttl_auto_and_refresh_defaults(monkeypatch):
+    for k in (
+        "COOKIE_MAX_TTL_HOURS",
+        "COOKIE_REFRESH_INTERVAL",
+        "COOKIE_REFRESH_IDLE_DAYS",
+    ):
+        monkeypatch.delenv(f"MENDARR_{k}", raising=False)
+    s = Settings()
+    assert (
+        s.cookie_max_ttl_hours,
+        s.cookie_refresh_interval,
+        s.cookie_refresh_idle_days,
+    ) == (6.0, "", 7.0)
+    for raw, want in (("auto", 0), ("AUTO", 0), ("0", 0), ("12", 12)):
+        monkeypatch.setenv("MENDARR_COOKIE_MAX_TTL_HOURS", raw)
+        assert Settings().cookie_max_ttl_hours == want

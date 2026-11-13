@@ -5,6 +5,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-11-13
+
+### Added
+- Background cookie refresher (`MENDARR_COOKIE_REFRESH_INTERVAL`, `MENDARR_COOKIE_REFRESH_IDLE_DAYS`, `cookies:` in `mendarr.yml`, Settings page): first round 60 s after start, background checks and solves keep one browser slot free, and the last check result is kept across restarts.
+- `auto` cache lifetime (`MENDARR_COOKIE_MAX_TTL_HOURS=auto` or `0`): a cached entry lives as long as its `cf_clearance` cookie.
+- Per-cookie expiry on the Cookies page.
+- One log line per request.
+- Domains that were requested but never showed a challenge appear in the Domains table as "no challenge".
+- Counter for cookie check/browser mismatches.
+- Stale marker on the Egress card.
+
+### Changed
+- The exit IP is refreshed in the background; requests no longer wait for the lookup.
+- The `debug` log level no longer enables library debug output.
+
 ## [0.7.2] — 2026-11-12
 
 ### Fixed

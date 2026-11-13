@@ -16,9 +16,13 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 KEEP_S = 30 * 86400
+CHECK_MISMATCH = "check_mismatch"  # cache check saw a challenge, the browser saw none
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS domain_runs (domain TEXT NOT NULL, ok INTEGER NOT NULL, at REAL NOT NULL);
 CREATE INDEX IF NOT EXISTS domain_runs_by_at ON domain_runs (at);
+CREATE TABLE IF NOT EXISTS domain_last (domain TEXT PRIMARY KEY, outcome TEXT NOT NULL, at REAL NOT NULL);
+CREATE TABLE IF NOT EXISTS domain_counters (
+  domain TEXT NOT NULL, name TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (domain, name));
 """
 
 
@@ -63,6 +67,33 @@ class DomainStats:
                 self._conn.execute("DELETE FROM domain_runs WHERE at < ?", (now - KEEP_S,))
             self._conn.commit()
 
+    def set_last(self, domain: str, outcome: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO domain_last VALUES (?, ?, ?) "
+                "ON CONFLICT(domain) DO UPDATE SET outcome = excluded.outcome, at = excluded.at",
+                (domain, outcome, self._clock()),
+            )
+            self._conn.commit()
+
+    def last(self) -> dict[str, tuple[str, float]]:
+        with self._lock:
+            rows = self._conn.execute("SELECT domain, outcome, at FROM domain_last").fetchall()
+        return {d: (o, at) for d, o, at in rows}
+
+    def bump(self, domain: str, name: str) -> None:
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO domain_counters VALUES (?, ?, 1) ON CONFLICT(domain, name) DO UPDATE SET n = n + 1",
+                (domain, name),
+            )
+            self._conn.commit()
+
+    def counters(self, name: str) -> dict[str, int]:
+        with self._lock:
+            rows = self._conn.execute("SELECT domain, n FROM domain_counters WHERE name = ?", (name,)).fetchall()
+        return dict(rows)
+
     def summary(self, since: float) -> dict[str, DomainRate]:
         with self._lock:
             rows = self._conn.execute(
@@ -91,7 +122,7 @@ class StatsHooks:
             log.exception("domain stats update failed")
 
     def failure(self, report: "FailureReport") -> None:
-        if report.kind != "network":  # site or worker down says nothing about solving
+        if report.kind != "network" and not report.background:  # site or worker down says nothing about solving
             self._add(report.domain, False)
         if self.inner is not None:
             self.inner.failure(report)

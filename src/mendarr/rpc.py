@@ -76,6 +76,7 @@ class SolveRequest(BaseModel):
     screenshot: bool = False
     plugin: PluginSpec | None = None  # None = the worker's builtin _default
     trace: bool = False  # attach TraceData when the run fails or ends on a challenge/block page
+    background: bool = False  # cookie refresher: answer no_slot at once instead of queueing behind real requests
 
 
 class SolveResult(BaseModel):
@@ -144,6 +145,7 @@ class CheckRequest(BaseModel):
     user_agent: str
     proxy: ProxySpec | None = None
     timeout_s: float = 15
+    background: bool = False  # cookie refresher: in browser check mode answer no_slot at once when no slot is free
 
 
 class CheckResult(BaseModel):
@@ -172,6 +174,7 @@ class EgressInfo(BaseModel):
     checked_at: float = 0
     proxy: str | None = None  # upstream proxy as scheme://host:port; None = direct
     country: str | None = None  # 2-letter ISO country code (e.g. "RO", "JP"); None = unasserted
+    stale: bool = False  # the last refresh failed; ip/country are from the last good lookup
 
 
 class WorkerInfo(BaseModel):

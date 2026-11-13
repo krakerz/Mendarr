@@ -10,6 +10,7 @@ from mendarr.rpc import (
     Snapshot,
     SolveRequest,
     SolveResult,
+    WorkerError,
 )
 
 UA = "Mozilla/5.0 (X11; Linux x86_64; rv:135.0) Gecko/20100101 Firefox/135.0"
@@ -53,6 +54,7 @@ class FakeWorker:
         self.sessions: dict[str, SessionCreate] = {}
         self.calls: list[tuple[str, object]] = []
         self.raise_on_solve: Exception | None = None
+        self.no_slot = False  # background solves/checks answer no_slot, like a busy worker
 
     async def user_agent(self) -> str:
         return self.ua
@@ -61,10 +63,14 @@ class FakeWorker:
         self.calls.append(("solve", req))
         if self.raise_on_solve is not None:
             raise self.raise_on_solve
+        if self.no_slot and req.background:
+            return SolveResult(error=WorkerError(type="no_slot", detail="busy"))
         return self.solve_results.pop(0) if self.solve_results else plain_result(req.url)
 
     async def check(self, req: CheckRequest) -> CheckResult:
         self.calls.append(("check", req))
+        if self.no_slot and req.background:
+            return CheckResult(error=WorkerError(type="no_slot", detail="busy"))
         if self.check_results:
             return self.check_results.pop(0)
         return CheckResult(snapshot=snapshot(req.url))

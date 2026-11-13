@@ -1,3 +1,4 @@
+import asyncio
 import hashlib
 import importlib.resources
 
@@ -79,3 +80,25 @@ async def test_upstream_unreachable_is_navigation():
     res = await ex.solve(request(spec(builtin_source())))
     assert res.error.type == "navigation"
     assert res.error.detail == detail
+
+
+class TwoSlotLauncher:
+    async def __call__(self, slot):
+        raise AssertionError("must not launch")
+
+
+async def test_background_solve_without_spare_slot_is_no_slot_at_once():
+    pool = SlotPool(2, TwoSlotLauncher())
+    ex = Executor(Settings(slots=2, egress_check_url=""), pool, SessionManager(pool), Egress("", 60))
+    req = request(spec(builtin_source())).model_copy(update={"background": True})
+    async with pool.acquire():  # one of two busy: no spare left
+        res = await asyncio.wait_for(ex.solve(req), 1)
+    assert res.error.type == "no_slot"
+
+
+async def test_background_solve_with_spare_slots_runs():
+    pool = SlotPool(2, TwoSlotLauncher())
+    ex = Executor(Settings(slots=2, egress_check_url=""), pool, SessionManager(pool), Egress("", 60))
+    req = request(spec(builtin_source())).model_copy(update={"background": True})
+    with pytest.raises(AssertionError, match="must not launch"):  # got past the guard into the launch
+        await ex.solve(req)

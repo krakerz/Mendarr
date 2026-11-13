@@ -11,7 +11,7 @@ import uvicorn
 from fastapi import FastAPI, HTTPException, Request, WebSocket
 from fastapi.responses import JSONResponse
 
-from mendarr import __version__
+from mendarr import __version__, logsetup
 from mendarr.config import Settings
 from mendarr.proxy import ProxyConfigError
 from mendarr.rpc import (
@@ -85,12 +85,16 @@ def create_app(
         if start_displays:
             displays.start()
         watchdog.start()
+        # before warm(): the Camoufox launch waits for the first lookup
+        egress_task = asyncio.create_task(egress.run()) if settings.egress_check_url else None
         warm = asyncio.create_task(pool.warm())
         try:
             yield
         finally:
             await watchdog.stop()
             warm.cancel()
+            if egress_task is not None:
+                egress_task.cancel()
             await manual.close_all()
             await sessions.close_all()
             await pool.close()
@@ -257,9 +261,9 @@ def main() -> None:
         smoke()
         return
     s = Settings()
-    logging.basicConfig(level=s.log_level.upper())
+    uv_level = logsetup.configure(s.log_level)
     try:
         app = create_app(s)
     except ProxyConfigError as e:
         raise SystemExit(f"mendarr-worker: {e}") from None
-    uvicorn.run(app, host=s.host, port=WORKER_PORT, log_level=s.log_level)
+    uvicorn.run(app, host=s.host, port=WORKER_PORT, log_level=uv_level)
