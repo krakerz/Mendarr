@@ -5,6 +5,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-11-13
+
+### Fixed
+- Cookie labels on the Cookies page lost the spaces between the cookie name, its expiry and "sets lifetime" (e.g. "cf_clearancein 364d").
+
+### Changed
+- Slim scrollbars in the dashboard's accent colour instead of the browser's default grey bars (Firefox shows a thin bar in the same colours).
+
 ## [0.8.0] — 2026-11-13
 
 ### Added

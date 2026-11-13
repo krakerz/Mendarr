@@ -182,7 +182,7 @@ table.data tr.bad:hover td { background: var(--red-bg); }
 .cell-main { font-weight: 500; color: var(--fg); }
 table.data code { white-space: nowrap; word-break: normal; overflow-wrap: normal; }
 .cookie-pills { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
-.cookie-pill { display: inline-flex; align-items: center; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); white-space: nowrap; line-height: 1.4; }
+.cookie-pill { display: inline-flex; align-items: center; gap: 0.5ch; font-size: 0.72rem; padding: 2px 7px; border-radius: 4px; font-family: var(--mono); white-space: nowrap; line-height: 1.4; }
 .cookie-pill.clearance { background: var(--green-bg); color: var(--green); border: 1px solid color-mix(in srgb, var(--green) 35%, transparent); font-weight: 600; }
 .cookie-pill.generic { background: var(--surface-3); color: var(--muted); border: 1px solid var(--border); }
 details table.data { margin-top: 8px; }
@@ -367,3 +367,13 @@ dl.kv dt:last-of-type, dl.kv dd:last-of-type { border-bottom: 0; }
 .auth-form { display: flex; flex-direction: column; gap: 16px; }
 .auth-form .btn { margin-top: 8px; }
 .auth-foot { margin-top: 20px; text-align: center; font-size: 0.75rem; color: var(--muted); }
+
+/* Scrollbars: slim accent thumb, no track. Chrome ignores ::-webkit-scrollbar once the standard properties are
+   set, so those are for Firefox only (thin + colours is all it supports). */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--accent) 45%, transparent); border-radius: 999px; }
+::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 45%, transparent) transparent; }
+}
