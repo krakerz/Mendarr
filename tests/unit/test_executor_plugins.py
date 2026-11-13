@@ -96,9 +96,23 @@ async def test_background_solve_without_spare_slot_is_no_slot_at_once():
     assert res.error.type == "no_slot"
 
 
+class LaunchAttempted(Exception):
+    pass
+
+
 async def test_background_solve_with_spare_slots_runs():
-    pool = SlotPool(2, TwoSlotLauncher())
+    launches = []
+
+    async def launcher(slot):
+        launches.append(slot)
+        raise LaunchAttempted  # past the guard; whether the executor re-raises or reports it doesn't matter
+
+    pool = SlotPool(2, launcher)
     ex = Executor(Settings(slots=2, egress_check_url=""), pool, SessionManager(pool), Egress("", 60))
     req = request(spec(builtin_source())).model_copy(update={"background": True})
-    with pytest.raises(AssertionError, match="must not launch"):  # got past the guard into the launch
-        await ex.solve(req)
+    try:
+        res = await ex.solve(req)
+    except LaunchAttempted:
+        res = None
+    assert res is None or res.error is None or res.error.type != "no_slot"
+    assert launches, "a background solve with two free slots must try to launch a browser"
