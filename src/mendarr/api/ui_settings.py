@@ -1,5 +1,7 @@
 """Settings page: edits the healer YAML (LLM endpoints, budgets, notifications, raw text)."""
 
+import asyncio
+import contextlib
 import os
 import re
 import shutil
@@ -13,7 +15,8 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import RedirectResponse, Response
 
 from mendarr.api.auth import require_user
-from mendarr.healer.config import MIN_UPDATE_S, HealerConfig, parse, parse_duration, update_policy
+from mendarr.api.worker_client import WorkerRejected, WorkerUnavailable
+from mendarr.healer.config import LOCALE_TAG, MIN_UPDATE_S, HealerConfig, HealerTuning, parse, parse_duration, update_policy
 from mendarr.plugins.guard import BACKENDS
 from mendarr.healer.llm import LlmClient
 from mendarr.healer.notify import TITLES, Notice, Notifier
@@ -103,6 +106,9 @@ def _flag(form, key: str) -> bool:
     return form.get(key) is not None
 
 
+_HEALER_DURATIONS = ("poll_s", "llm_wait_s", "give_up_after", "replay_timeout_s")
+
+
 def _opt(target: dict, key: str, value: str) -> None:
     value = value.strip()
     if value:
@@ -158,10 +164,9 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
     dur = {
         "heal_windows": ", ".join(str(w) for w in windows),
         "agent_wait": esc_raw.get("agent_wait", _fmt_dur(cfg.escalation.agent_wait)),
-        **{
-            k: heal_raw.get(k, _fmt_dur(getattr(cfg.healer, k)))
-            for k in ("poll_s", "llm_wait_s", "give_up_after", "replay_timeout_s")
-        },
+        # only what the file sets: the default is the input's placeholder, so saving the form doesn't pin it
+        **{k: heal_raw.get(k, "") for k in _HEALER_DURATIONS},
+        "defaults": {k: _fmt_dur(HealerTuning.model_fields[k].default) for k in _HEALER_DURATIONS},
         "notify_timeout": notify_raw.get("timeout_s", _fmt_dur(cfg.notify.timeout_s)),
     }
     return {
@@ -193,7 +198,9 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
         "solver": {
             "default_backend": solver_raw.get("default_backend", ""),
             "backends": BACKENDS,
+            "backend_order": solver_raw.get("backend_order") or [],
             "env_backend": st.default_backend,
+            "locale": solver_raw.get("locale", ""),
         },
         "updates": {
             "enabled": upd_enabled,
@@ -201,6 +208,7 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
             "env_interval": st.update_check_interval,
             "view": request.app.state.updates.snapshot(),
         },
+        "backends_view": getattr(request.app.state, "backends_view", None),
         "events": _EVENTS,
         "titles": TITLES,
         **extra,
@@ -235,7 +243,11 @@ async def _edit(request: Request, mutate: Callable[[dict, object], None], messag
 
 
 @router.get("/settings")
-def settings_page(request: Request) -> Response:
+async def settings_page(request: Request) -> Response:
+    if getattr(request.app.state, "backends_view", None) is None:
+        # local GET, no remote check; an old or unreachable worker leaves the card at "not checked"
+        with contextlib.suppress(Exception):  # incl. a fake or old worker without the call
+            request.app.state.backends_view = await asyncio.wait_for(request.app.state.worker.backends(), 3.0)
     return _page(request)
 
 
@@ -331,7 +343,7 @@ async def budgets(request: Request) -> Response:
             ("cross_replay_max", "Cross-replay max"),
         ):
             healer[key] = _int(form, key, label)
-        for key in ("poll_s", "llm_wait_s", "give_up_after", "replay_timeout_s"):
+        for key in _HEALER_DURATIONS:
             _opt(healer, key, str(form.get(key, "")))
 
     return await _edit(request, mutate, "Saved the budgets", "budgets")
@@ -369,6 +381,22 @@ async def solver_save(request: Request) -> Response:
             raise _Bad(f"Default backend must be one of: {', '.join(BACKENDS)}")
         else:
             sec["default_backend"] = value
+        order = [v for v in (str(form.get(f"order_{n}", "")).strip() for n in (1, 2, 3)) if v]
+        if any(v not in BACKENDS for v in order):
+            raise _Bad(f"Backend switch order must use: {', '.join(BACKENDS)}")
+        if len(set(order)) != len(order):
+            raise _Bad("Backend switch order lists a backend twice")
+        if not order or tuple(order) == BACKENDS:
+            sec.pop("backend_order", None)
+        else:
+            sec["backend_order"] = order
+        locale = str(form.get("locale", "")).strip()
+        if not locale:
+            sec.pop("locale", None)
+        elif not LOCALE_TAG.match(locale):
+            raise _Bad("Browser language must be a tag like en, en-US or zh-Hant-TW")
+        else:
+            sec["locale"] = locale
 
     return await _edit(request, mutate, "Saved the solver settings", "solver")
 
@@ -404,6 +432,81 @@ async def updates_check(request: Request) -> Response:
     if view.update_available:
         return _saved(f"Mendarr {view.latest} is available", "updates")
     return _saved("Mendarr is up to date", "updates")
+
+
+def _backend_err(message: str) -> Response:
+    return RedirectResponse(f"/ui/settings?err={quote(message)}#backends", status_code=303)
+
+
+def _worker_error(e: Exception) -> str:
+    if isinstance(e, WorkerRejected):
+        return e.detail or str(e) or f"worker answered {e.status}"
+    if isinstance(e, WorkerUnavailable):  # most often the self-restart after a Camoufox update or revert
+        return "the worker is not reachable, it may be restarting; try again in a few seconds"
+    return str(e) or type(e).__name__  # TimeoutError has no text
+
+
+_WORKER_ERRORS = (WorkerUnavailable, TimeoutError)
+
+
+async def _refresh_backends(request: Request) -> None:
+    try:
+        request.app.state.backends_view = await request.app.state.worker.backends()
+    except _WORKER_ERRORS:
+        pass  # keep the last snapshot; the action's own answer is what matters
+
+
+@router.post("/settings/backends/check")
+async def backends_check(request: Request) -> Response:
+    try:
+        request.app.state.backends_view = await request.app.state.worker.backends_check()
+    except _WORKER_ERRORS as e:
+        return _backend_err(f"Backend check failed: {_worker_error(e)}")
+    return _saved("Checked the backends", "backends")
+
+
+@router.post("/settings/backends/restart")
+async def backends_restart(request: Request) -> Response:
+    worker = request.app.state.worker
+    try:
+        result = await worker.backends_restart(force=True)
+    except _WORKER_ERRORS as e:
+        return _backend_err(f"Restart failed: {_worker_error(e)}")
+    request.app.state.backends_view = result
+    return _saved(f"Worker restarting: closed {result.closed} open session(s)", "backends")
+
+
+@router.post("/settings/backends/{name}/update")
+async def backends_update(request: Request, name: str) -> Response:
+    if name not in BACKENDS:
+        return _backend_err(f"Unknown backend: {name}")
+    try:
+        status = await request.app.state.worker.backend_update(name)
+    except _WORKER_ERRORS as e:
+        return _backend_err(f"Update of {name} failed: {_worker_error(e)}")
+    await _refresh_backends(request)
+    if status.state == "failed":
+        return _backend_err(f"Update of {name} failed: {status.error or 'unknown error'}")
+    if status.state == "pending_restart":
+        return _saved(
+            f"{name} {status.installed or status.latest} downloaded; the worker restarts when no solve, session or manual solve is open",
+            "backends",
+        )
+    return _saved(f"{name} updated to {status.installed or status.latest}", "backends")
+
+
+@router.post("/settings/backends/{name}/revert")
+async def backends_revert(request: Request, name: str) -> Response:
+    if name not in BACKENDS:
+        return _backend_err(f"Unknown backend: {name}")
+    try:
+        status = await request.app.state.worker.backend_revert(name)
+    except _WORKER_ERRORS as e:
+        return _backend_err(f"Revert of {name} failed: {_worker_error(e)}")
+    await _refresh_backends(request)
+    if status.state == "failed":
+        return _backend_err(f"Revert of {name} failed: {status.error or 'unknown error'}")
+    return _saved(f"Reverted {name} to {status.installed or 'built-in'}", "backends")
 
 
 @router.post("/settings/notify")

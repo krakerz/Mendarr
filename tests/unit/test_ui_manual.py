@@ -236,3 +236,9 @@ def test_autosolve_route(ui_client, stub):
 
 def test_session_page_has_autosolve_button(ui_client, stub):
     assert "/ui/manual/m1/autosolve" in ui_client.get("/ui/manual/m1").text
+
+
+def test_picker_follows_backend_order(ui_client):
+    page = ui_client.get("/ui/manual").text
+    assert page.index('value="camoufox"') < page.index('value="patchright"')
+    assert 'value="obscura"' not in page

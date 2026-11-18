@@ -4,6 +4,8 @@ import functools
 import hmac
 import logging
 import os
+import signal
+import sys
 from collections.abc import Callable
 from contextlib import asynccontextmanager
 
@@ -15,6 +17,10 @@ from mendarr import __version__, logsetup
 from mendarr.config import Settings
 from mendarr.proxy import ProxyConfigError
 from mendarr.rpc import (
+    BackendRestart,
+    BackendRestartResult,
+    BackendsState,
+    BackendStatus,
     CheckRequest,
     CheckResult,
     EgressInfo,
@@ -30,7 +36,8 @@ from mendarr.rpc import (
     SolveResult,
     WorkerInfo,
 )
-from mendarr.worker.backends import BACKENDS, camoufox, patchright, obscura
+from mendarr.worker.backend_updates import BackendUpdater, camoufox_overlay
+from mendarr.worker.backends import BACKENDS, UpstreamUnreachable, camoufox, patchright, obscura
 from mendarr.worker.backends.camoufox import Launcher
 from mendarr.worker.check import CookieChecker
 from mendarr.worker.display import DisplayManager, vnc_port
@@ -45,6 +52,18 @@ from mendarr.worker.watchdog import Watchdog
 log = logging.getLogger("mendarr.worker.server")
 
 WORKER_PORT = 8192
+RESTART_POLL_S = 5.0
+
+_restart = False  # set once an updated Camoufox build waits for a worker restart
+
+
+def restart_requested() -> bool:
+    return _restart
+
+
+def _flag_restart() -> None:
+    global _restart
+    _restart = True
 
 
 def create_app(
@@ -70,15 +89,36 @@ def create_app(
     else:
         launchers = {
             "camoufox": functools.partial(camoufox.launch, settings=settings, exit_ip=egress.exit_ip),
-            "patchright": functools.partial(patchright.launch, settings=settings),
-            "obscura": functools.partial(obscura.launch, settings=settings),
+            "patchright": functools.partial(patchright.launch, settings=settings, exit_ip=egress.exit_ip),
+            "obscura": functools.partial(obscura.launch, settings=settings, exit_ip=egress.exit_ip),
         }
-    pool = SlotPool(settings.slots, launchers)
+    pool = SlotPool(settings.slots, launchers, per_proxy={"obscura"}, upstream=upstream)
     sessions = SessionManager(pool)
     checker = CookieChecker(settings, pool)
     watchdog = Watchdog(settings.plugin_stall_s, settings.plugin_kill_s)
     executor = Executor(settings, pool, sessions, egress, watchdog)
     manual = ManualSessions(pool, egress, executor)
+    restart_task: asyncio.Task | None = None
+
+    def restart_now() -> None:
+        log.info("restarting the worker to switch the Camoufox browser build")
+        os.kill(os.getpid(), signal.SIGTERM)  # uvicorn shuts down cleanly, main() re-execs
+
+    def is_idle() -> bool:
+        return pool.idle() and manual.count() == 0 and not sessions.ids()
+
+    async def restart_when_idle() -> None:
+        while not is_idle():
+            await asyncio.sleep(RESTART_POLL_S)
+        restart_now()
+
+    def request_restart() -> None:
+        nonlocal restart_task
+        _flag_restart()
+        if restart_task is None or restart_task.done():
+            restart_task = asyncio.get_running_loop().create_task(restart_when_idle())
+
+    updater = BackendUpdater(settings, pool, is_idle=is_idle, request_restart=request_restart)
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
@@ -88,9 +128,13 @@ def create_app(
         # before warm(): the Camoufox launch waits for the first lookup
         egress_task = asyncio.create_task(egress.run()) if settings.egress_check_url else None
         warm = asyncio.create_task(pool.warm())
+        updater.start()
         try:
             yield
         finally:
+            await updater.stop()
+            if restart_task is not None:
+                restart_task.cancel()
             await watchdog.stop()
             warm.cancel()
             if egress_task is not None:
@@ -120,6 +164,7 @@ def create_app(
     app.state.checker = checker
     app.state.executor = executor
     app.state.manual = manual
+    app.state.backends = updater
 
     @app.get("/health")
     def health() -> dict:
@@ -175,6 +220,8 @@ def create_app(
             return await manual.start(req)
         except NoFreeSlot:
             return JSONResponse({"detail": "no free slot"}, status_code=409)
+        except UpstreamUnreachable as e:  # dead request proxy (obscura preflight): a clean error, not a 500
+            return JSONResponse({"detail": str(e)}, status_code=502)
 
     @app.get("/manual/{sid}")
     async def manual_state(sid: str) -> ManualState:
@@ -203,6 +250,48 @@ def create_app(
     @app.delete("/manual/{sid}")
     async def manual_cancel(sid: str) -> dict:
         return {"existed": await manual.cancel(sid)}
+
+    @app.get("/backends")
+    async def backends() -> BackendsState:
+        await updater.refresh_installed()
+        return updater.state()
+
+    @app.post("/backends/check")
+    async def backends_check() -> BackendsState:
+        return await updater.check()
+
+    @app.post("/backends/restart")
+    async def backends_restart(req: BackendRestart) -> BackendRestartResult:
+        state = updater.state()
+        if not any(b.name == "camoufox" and b.state == "pending_restart" for b in state.backends):
+            raise HTTPException(409, "no restart is pending")
+        closed = 0
+        if req.force:
+            closed = manual.count() + len(sessions.ids())
+            await manual.close_all()
+            await sessions.close_all()
+            log.info("forced restart: closed %s open session(s) and manual solve(s)", closed)
+            if restart_task is not None:
+                restart_task.cancel()
+            _flag_restart()
+            restart_now()
+        else:
+            request_restart()
+        return BackendRestartResult(**state.model_dump(), closed=closed)
+
+    @app.post("/backends/{name}/update")
+    async def backend_update(name: str) -> BackendStatus:
+        try:
+            return await updater.update(name)
+        except KeyError:
+            raise HTTPException(404, f"backend {name!r} cannot be updated here") from None
+
+    @app.post("/backends/{name}/revert")
+    async def backend_revert(name: str) -> BackendStatus:
+        try:
+            return await updater.revert(name)
+        except KeyError:
+            raise HTTPException(404, f"backend {name!r} cannot be reverted here") from None
 
     @app.websocket("/vnc/{slot}")
     async def vnc(ws: WebSocket, slot: int) -> None:
@@ -262,8 +351,14 @@ def main() -> None:
         return
     s = Settings()
     uv_level = logsetup.configure(s.log_level)
+    overlay = camoufox_overlay(s)
+    if overlay is not None:  # before anything imports camoufox: its install dir is fixed at import
+        os.environ["XDG_CACHE_HOME"] = str(overlay)
+        log.info("camoufox: using the updated browser in %s", overlay)
     try:
         app = create_app(s)
     except ProxyConfigError as e:
         raise SystemExit(f"mendarr-worker: {e}") from None
     uvicorn.run(app, host=s.host, port=WORKER_PORT, log_level=uv_level)
+    if restart_requested():  # an applied Camoufox update: re-exec once uvicorn has shut down cleanly
+        os.execv(sys.argv[0], sys.argv)

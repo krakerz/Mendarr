@@ -32,7 +32,7 @@ def with_backend(backend: str) -> str:
 def make_executor():
     launched: list = []
 
-    async def launcher(slot):
+    async def launcher(slot, locale=None):
         launched.append(slot)
         raise AssertionError("must not launch")
 
@@ -76,7 +76,7 @@ async def test_upstream_unreachable_is_navigation():
 
     detail = "Upstream proxy socks5://up:1080 failed: x"
 
-    async def launcher(slot):
+    async def launcher(slot, locale=None):
         raise UpstreamUnreachable(detail)
 
     pool = SlotPool(1, launcher)
@@ -105,7 +105,7 @@ class LaunchAttempted(Exception):
 
 
 async def test_background_solve_with_spare_slots_runs():
-    async def launcher(slot):
+    async def launcher(slot, locale=None):
         raise LaunchAttempted
 
     pool = SlotPool(2, launcher)

@@ -1,12 +1,17 @@
 """API -> worker HTTP client. Endpoints mirror worker/server.py."""
 
+import contextlib
 import logging
 import time
 from typing import Protocol
+from urllib.parse import quote
 
 import httpx
 
 from mendarr.rpc import (
+    BackendRestartResult,
+    BackendsState,
+    BackendStatus,
     CheckRequest,
     CheckResult,
     EgressInfo,
@@ -35,9 +40,10 @@ class WorkerUnavailable(Exception):
 class WorkerRejected(WorkerUnavailable):
     """The worker answered with an error status (404 = unknown manual session, 409 = no free slot)."""
 
-    def __init__(self, status: int, message: str) -> None:
+    def __init__(self, status: int, message: str, detail: str = "") -> None:
         super().__init__(message)
         self.status = status
+        self.detail = detail  # the worker's own error text, when it sent one (502 = upstream proxy failed)
 
 
 class WorkerClient(Protocol):
@@ -49,6 +55,11 @@ class WorkerClient(Protocol):
     async def destroy_session(self, session_id: str) -> bool: ...
     async def info(self) -> WorkerInfo: ...
     async def egress(self) -> EgressInfo: ...
+    async def backends(self) -> BackendsState: ...
+    async def backends_check(self) -> BackendsState: ...
+    async def backend_update(self, name: str) -> BackendStatus: ...
+    async def backend_revert(self, name: str) -> BackendStatus: ...
+    async def backends_restart(self, force: bool = False) -> BackendRestartResult: ...
     async def manual_start(self, req: ManualStart) -> ManualStarted: ...
     async def manual_state(self, sid: str) -> ManualState: ...
     async def manual_finish(self, sid: str) -> ManualResult: ...
@@ -75,7 +86,11 @@ class HttpWorkerClient:
             raise WorkerUnavailable(str(e) or type(e).__name__) from e
         log.debug("worker %s %s -> %s in %.2fs", method, path, r.status_code, time.monotonic() - t0)
         if not r.is_success:
-            raise WorkerRejected(r.status_code, f"worker answered {r.status_code} on {method} {path}")
+            detail = ""
+            with contextlib.suppress(ValueError, AttributeError):
+                d = r.json().get("detail")
+                detail = d if isinstance(d, str) else ""
+            raise WorkerRejected(r.status_code, f"worker answered {r.status_code} on {method} {path}", detail)
         try:
             return r.json()
         except ValueError as e:
@@ -110,6 +125,24 @@ class HttpWorkerClient:
 
     async def egress(self) -> EgressInfo:
         return EgressInfo.model_validate(await self._call("GET", "/egress"))
+
+    async def backends(self) -> BackendsState:
+        return BackendsState.model_validate(await self._call("GET", "/backends", timeout=5))
+
+    async def backends_check(self) -> BackendsState:
+        return BackendsState.model_validate(await self._call("POST", "/backends/check", timeout=60))
+
+    async def backend_update(self, name: str) -> BackendStatus:
+        # camoufox: fetch + smoke launch of a full browser build
+        return BackendStatus.model_validate(await self._call("POST", f"/backends/{quote(name, safe='')}/update", timeout=1200))
+
+    async def backend_revert(self, name: str) -> BackendStatus:
+        return BackendStatus.model_validate(await self._call("POST", f"/backends/{quote(name, safe='')}/revert", timeout=30))
+
+    async def backends_restart(self, force: bool = False) -> BackendRestartResult:
+        return BackendRestartResult.model_validate(
+            await self._call("POST", "/backends/restart", timeout=30, json={"force": force})
+        )
 
     async def manual_start(self, req: ManualStart) -> ManualStarted:
         data = await self._call("POST", "/manual", timeout=req.slot_wait_s + 30, json=req.model_dump())

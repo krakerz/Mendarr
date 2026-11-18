@@ -7,8 +7,8 @@
   <meta name="csrf-token" content="{{ request.state.csrf|default('') }}">
   <title>{% block title %}Mendarr{% endblock %} · Mendarr</title>
   <link rel="icon" href="/ui/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/ui/static/app.css">
-  <script src="/ui/static/vendor/htmx/htmx.min.js" defer></script>
+  <link rel="stylesheet" href="/ui/static/app.css?v={{ asset_v }}">
+  <script src="/ui/static/vendor/htmx/htmx.min.js?v={{ asset_v }}" defer></script>
   {% block head %}{% endblock %}
 </head>
 <body hx-headers='{"X-CSRF-Token": "{{ request.state.csrf|default('') }}"}'>

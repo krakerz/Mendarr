@@ -24,7 +24,7 @@ from mendarr.core.stats import DomainStats, StatsHooks
 from mendarr.core.traces import TraceStore
 from mendarr.core.tracker import SolveTracker
 from mendarr.core.updates import UpdateChecker
-from mendarr.healer.config import ConfigFile, config_path, default_backend
+from mendarr.healer.config import ConfigFile, config_path, configured_locale, default_backend
 from mendarr.healer.loop import Healer
 from mendarr.healer.notify import Notifier
 from mendarr.plugins.store import PluginStore, RollbackPolicy
@@ -57,6 +57,7 @@ def create_app(
         tracker=tracker,
         stats=stats,
         default_backend=lambda: default_backend(settings, config_file.get()),
+        locale=lambda: configured_locale(config_file.get()),
     )
     healer = Healer(
         settings, store, router, traces, config_file, notifier=Notifier(public_url=settings.public_url), tracker=tracker
@@ -70,6 +71,7 @@ def create_app(
         hold_policy=lambda d: config_file.get().for_domain(d).escalation.manual.hold_requests,
         give_up_s=lambda: config_file.get().healer.give_up_after,
         plugin_resolver=router._resolve_plugin,
+        locale=lambda: configured_locale(config_file.get()),
     )
     router.manual = manual
     refresher = Refresher(settings, router, cache, worker, config_file, manual)
@@ -108,6 +110,7 @@ def create_app(
     app.state.tracker = tracker
     app.state.refresher = refresher
     app.state.updates = updates
+    app.state.backends_view = None  # last BackendsState from the worker (Settings → Backends)
     app.state.auth = Auth.from_settings(settings)
     app.state.user_agent = ""
     app.include_router(v1_router)

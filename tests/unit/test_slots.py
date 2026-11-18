@@ -2,6 +2,8 @@ import asyncio
 
 import pytest
 
+from mendarr.proxy import parse_upstream
+from mendarr.rpc import ProxySpec
 from mendarr.worker.backends.camoufox import LaunchedBrowser
 from mendarr.worker.slots import SlotPool
 
@@ -17,7 +19,7 @@ class FakeBrowser:
 def make_pool(count=1):
     launched: list[tuple[int, FakeBrowser, list]] = []
 
-    async def launcher(slot):
+    async def launcher(slot, locale=None):
         b = FakeBrowser()
         closed: list = []
 
@@ -122,3 +124,97 @@ async def test_background_ok_single_slot():
     assert pool.background_ok()
     async with pool.acquire():
         assert not pool.background_ok()
+
+
+async def test_locale_relaunch_counts_default_contexts():
+    browsers: list[FakeBrowser] = []
+
+    async def launcher(slot, locale=None):
+        b = FakeBrowser()
+        b.contexts = [object()]  # a CDP connection's default context
+        browsers.append(b)
+
+        async def close():
+            pass
+
+        return LaunchedBrowser(b, "UA", close, locale, base_contexts=1)
+
+    pool = SlotPool(1, launcher)
+    await pool.browser(1, "camoufox", "en-US")
+    await pool.browser(1, "camoufox", "fr-FR")
+    assert len(browsers) == 2  # idle (only the default context): relaunched
+    browsers[1].contexts.append(object())  # a real session
+    await pool.browser(1, "camoufox", "de-DE")
+    assert len(browsers) == 2  # busy: deferred
+
+
+class CtxBrowser(FakeBrowser):
+    def __init__(self):
+        super().__init__()
+        self.contexts: list = []
+
+
+def make_proxy_pool(upstream=None):
+    """Launchers that take `proxy=`; `calls` = (backend, proxy url or None), `closed` = the closed proxy urls."""
+    calls: list[tuple[str, str | None]] = []
+    closed: list[str | None] = []
+
+    def launcher(backend):
+        async def launch(slot, locale=None, proxy=None):
+            url = proxy.url if proxy else None
+            calls.append((backend, url))
+
+            async def close():
+                closed.append(url)
+
+            return LaunchedBrowser(CtxBrowser(), f"UA-{backend}-{url}", close)
+
+        return launch
+
+    pool = SlotPool(
+        1, {"obscura": launcher("obscura"), "camoufox": launcher("camoufox")}, per_proxy={"obscura"}, upstream=upstream
+    )
+    return pool, calls, closed
+
+
+A = ProxySpec(url="http://a:1")
+B = ProxySpec(url="http://b:2", username="u", password="secret")
+
+
+async def test_per_proxy_backend_runs_each_proxy_on_its_own_process():
+    pool, calls, closed = make_proxy_pool()
+    b1 = await pool.browser(1, "obscura", proxy=A)
+    assert await pool.browser(1, "obscura", proxy=A) is b1
+    assert calls == [("obscura", "http://a:1")]
+    await pool.browser(1, "obscura", proxy=B)
+    assert closed == ["http://a:1"]  # one per-proxy process per slot: A's closed first
+    await pool.browser(1, "obscura")
+    assert calls[-1] == ("obscura", None) and closed == ["http://a:1"]  # default left B alone
+    assert pool.user_agent(1, "obscura", B) == "UA-obscura-http://b:2"
+    assert pool.user_agent(1, "obscura") == "UA-obscura-None"
+
+
+async def test_other_backends_keep_the_default_process_with_a_proxy():
+    pool, calls, _ = make_proxy_pool()
+    b = await pool.browser(1, "camoufox", proxy=A)
+    assert calls == [("camoufox", None)]
+    assert await pool.browser(1, "camoufox") is b
+
+
+async def test_request_proxy_equal_to_the_upstream_uses_the_default_process():
+    pool, calls, _ = make_proxy_pool(upstream=parse_upstream("http://u:p@h:3128"))
+    same = ProxySpec(url="http://h:3128", username="u", password="p")
+    b = await pool.browser(1, "obscura", proxy=same)
+    assert await pool.browser(1, "obscura") is b
+    assert calls == [("obscura", None)]
+
+
+async def test_retire_relaunches_an_idle_browser_but_not_one_with_contexts():
+    pool, calls, closed = make_proxy_pool()
+    b = await pool.browser(1, "obscura")
+    pool.retire("obscura")
+    b2 = await pool.browser(1, "obscura")
+    assert b2 is not b and len(calls) == 2 and closed == [None]
+    b2.contexts.append(object())  # a context in use
+    pool.retire("obscura")
+    assert await pool.browser(1, "obscura") is b2 and len(calls) == 2

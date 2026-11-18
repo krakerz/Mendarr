@@ -7,8 +7,8 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from mendarr.api.auth import require_user
-from mendarr.core.manual import ManualError, ManualManager, ManualSession
-from mendarr.healer.config import default_backend
+from mendarr.core.manual import ManualError, ManualManager, ManualSession, manual_backends
+from mendarr.healer.config import backend_order, default_backend
 from mendarr.web import error_page, render
 
 router = APIRouter(prefix="/ui", dependencies=[Depends(require_user)])
@@ -52,6 +52,14 @@ async def clear_manual_sessions(request: Request) -> Response:
     return _go(request, f"/ui/manual?ok={quote(f'Cleared {count} finished session(s)')}")
 
 
+def picker_context(st) -> dict:
+    """Template variables for a manual-solve backend select: options in the configured order, default preselected."""
+    cfg = st.config_file.get()
+    options = manual_backends(backend_order(cfg))
+    default = default_backend(st.settings, cfg)
+    return {"manual_backends": options, "manual_default": default if default in options else options[0]}
+
+
 @router.get("/manual", response_class=HTMLResponse)
 async def list_manual(request: Request, error: str = "") -> Response:
     st = request.app.state
@@ -61,7 +69,7 @@ async def list_manual(request: Request, error: str = "") -> Response:
         active="manual",
         sessions=_manager(request).sessions(),
         error=error,
-        default_backend=default_backend(st.settings, st.config_file.get()),
+        **picker_context(st),
     )
 
 

@@ -129,3 +129,17 @@ def test_history_and_demo():
     assert "### Last candidate (e.com@v3)" in t and "### Its replay" in t and "replay step" in t
     assert "Q" * 401 not in t and "Q" * 400 in t
     assert "## Demonstration by a human" in t and "human clicked" in t
+
+
+def test_switch_backend_order_and_steps():
+    order = ("camoufox", "patchright", "obscura")
+    src = 'META = {"backend": "patchright"}\n\nasync def solve(page, ctx):\n    pass\n'
+    assert "'backend': 'obscura'" in switch_backend(src, order=order, step=1)
+    assert "'backend': 'camoufox'" in switch_backend(src, order=order, step=2)
+    assert switch_backend(src, order=order, step=3) is None
+    subset = ("patchright", "obscura")
+    assert "'backend': 'obscura'" in switch_backend(src, order=subset, step=1)
+    assert switch_backend(src, order=subset, step=2) is None
+    # current backend outside the order: the order as-is
+    assert "'backend': 'obscura'" in switch_backend(src, order=("obscura", "camoufox"), step=1)
+    assert "'backend': 'camoufox'" in switch_backend(src, order=("obscura", "camoufox"), step=2)

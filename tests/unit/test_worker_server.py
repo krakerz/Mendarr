@@ -19,11 +19,11 @@ class FakeBrowser:
     def is_connected(self):
         return True
 
-    async def new_context(self, proxy=None):
+    async def new_context(self, proxy=None, **kw):
         return FakeContext(self)
 
 
-async def fake_launcher(slot):
+async def fake_launcher(slot, locale=None):
     async def close():
         pass
 
@@ -83,3 +83,18 @@ def test_egress_answers_while_the_lookup_hangs(monkeypatch):
     with TestClient(app) as c:
         r = c.get("/egress")
         assert r.json()["ip"] == "unknown"
+
+
+def test_manual_start_maps_a_dead_request_proxy_to_502(monkeypatch):
+    from mendarr.worker.backends import UpstreamUnreachable
+    from mendarr.worker.manual import ManualSessions
+
+    async def boom(self, req):
+        raise UpstreamUnreachable("Upstream proxy http://p:1 failed: refused")
+
+    monkeypatch.setattr(ManualSessions, "start", boom)
+    app = create_app(Settings(slots=1, egress_check_url=""), launcher=fake_launcher, start_displays=False)
+    with TestClient(app) as c:
+        r = c.post("/manual", json={"url": "https://example.org", "backend": "camoufox"})
+    assert r.status_code == 502
+    assert r.json()["detail"] == "Upstream proxy http://p:1 failed: refused"

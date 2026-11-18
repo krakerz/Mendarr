@@ -136,6 +136,10 @@ async def test_start_worker_errors(parts):
     with pytest.raises(ManualError) as e:
         await m.start(iid)
     assert e.value.status == 409
+    w.start_error = WorkerRejected(502, "worker answered 502", "Upstream proxy http://p:1 failed: refused")
+    with pytest.raises(ManualError) as e:
+        await m.start(iid)
+    assert e.value.status == 502 and str(e.value) == "Upstream proxy http://p:1 failed: refused"
     w.start_error = WorkerUnavailable("down")
     with pytest.raises(ManualError) as e:
         await m.start(iid)
@@ -407,3 +411,12 @@ async def test_autosolve_failure_and_concurrency(parts):
         await m.autosolve("nope")
     assert e.value.status == 404
     await m.cancel(s.id)
+
+
+def test_manual_backends_follow_order():
+    from mendarr.core.manual import manual_backends
+
+    assert manual_backends(("camoufox", "patchright", "obscura")) == ["camoufox", "patchright"]
+    assert manual_backends(("obscura", "patchright", "camoufox")) == ["patchright", "camoufox"]
+    assert manual_backends(("patchright",)) == ["patchright", "camoufox"]
+    assert manual_backends(("obscura",)) == ["camoufox", "patchright"]

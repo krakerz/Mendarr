@@ -105,8 +105,11 @@ def test_worker_requires_token():
 def test_worker_is_unprivileged():
     out = ok(compose_exec(
         "mendarr-browser", "sh", "-c",
-        "id -u; test -e /data && echo has-data; touch /app/.venv/probe 2>/dev/null && echo venv-writable; true",
+        "id -u; test -n \"$(ls -A /data 2>/dev/null | grep -vx backends)\" && echo has-data; "
+        "touch /app/.venv/probe 2>/dev/null && echo venv-writable; "
+        "test -d /data/backends && test -n \"$(find /data/backends -maxdepth 0 -perm -o+w)\" && echo backends-world-writable; true",
     ))
     lines = out.split()
     assert lines[0] != "0"
     assert "has-data" not in lines and "venv-writable" not in lines
+    assert "backends-world-writable" not in lines

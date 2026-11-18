@@ -20,7 +20,7 @@ class FakeBrowser:
     def is_connected(self):
         return self.connected
 
-    async def new_context(self, proxy=None):
+    async def new_context(self, proxy=None, **kw):
         c = FakeContext(self)
         c.proxy = proxy
         self.contexts.append(c)

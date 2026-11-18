@@ -18,9 +18,17 @@ services:
       # - MENDARR_PROXY_TYPE=socks5          # http (default), https or socks5
       # - MENDARR_PROXY_USERNAME=            # HTTP(S) proxies only
       # - MENDARR_PROXY_PASSWORD=
+      # - MENDARR_LOCALE=en-US               # browser language for every backend (default: exit country's main language); Settings page wins
+      # Updated obscura / Camoufox builds (Settings -> Browser backends) are kept in the volume below.
+      # - MENDARR_BACKEND_AUTO_UPDATE=true      # install new builds on its own (default: off)
+      # - MENDARR_BACKEND_UPDATE_INTERVAL=24h   # minimum 1h
+    volumes:
+      - mendarr-backends:/data/backends
+      # or a folder on an external drive (Linux filesystem, not noexec; `chown 1000:1000` it first):
+      # - /mnt/external/mendarr-backends:/data/backends
     # no published ports: only the API talks to the worker (8192, also carries the token-protected VNC bridge)
     # hard kill switch: put the worker on an `internal: true` network that only reaches the API and the proxy
-    # plugin code runs here: no data volume, no secrets besides the worker token, no privileges
+    # plugin code runs here: no data volume besides the browser builds above, no secrets besides the worker token, no privileges
     cap_drop: [ALL]
     security_opt: ["no-new-privileges:true"]
     sysctls:
@@ -49,3 +57,6 @@ services:
       - ./data:/data
     depends_on: [mendarr-browser]
     restart: unless-stopped
+
+volumes:
+  mendarr-backends:

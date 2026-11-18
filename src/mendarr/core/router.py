@@ -103,6 +103,7 @@ class Router:
         tracker: SolveTracker | None = None,
         stats: DomainStats | None = None,
         default_backend: Callable[[], str] | None = None,
+        locale: Callable[[], str | None] | None = None,
     ) -> None:
         self._settings = settings
         self._worker = worker
@@ -114,6 +115,7 @@ class Router:
         self.tracker = tracker
         self._stats = stats
         self._default_backend = default_backend
+        self._locale = locale
 
     async def request(self, p: V1Params) -> Outcome:
         t0 = self._clock()
@@ -214,6 +216,7 @@ class Router:
                     user_agent=entry.ua,
                     proxy=p.proxy,
                     timeout_s=timeout_s,
+                    locale=self._locale() if self._locale else None,
                     background=background,
                 )
             )
@@ -272,6 +275,7 @@ class Router:
                         wait_s=0 if p.return_only_cookies else p.wait_s,
                         screenshot=p.return_screenshot,
                         plugin=spec,
+                        locale=self._locale() if self._locale else None,
                         default_backend=self._default_backend() if self._default_backend else None,
                         trace=True,
                         background=background,
@@ -395,14 +399,20 @@ class Router:
         method: Literal["GET", "POST"] = "GET",
         post_data: str | None = None,
     ) -> Outcome:
-        """Run one plugin version once (healer replay): no cookie cache, no session, no stats."""
+        """Run one plugin version once (healer replay): no cache lookup, no session, no stats.
+
+        A replay that clears a challenge stores its cookies like a client solve does: they are as good as any,
+        and the next request is a cache hit instead of solving the same challenge again.
+        """
         p = V1Params(
             url=url, method=method, post_data=post_data, max_timeout_ms=max_timeout_ms, cookies=[],
             proxy=None, session=None, session_ttl_minutes=None, return_only_cookies=False,
             return_screenshot=False, disable_media=False, wait_s=0,
         )
         deadline = self._clock() + max_timeout_ms / 1000
-        return await self._solve(p, lambda: deadline - self._clock(), False, spec=spec, record=False)
+        return await self._solve(
+            p, lambda: deadline - self._clock(), self._settings.cookie_cache, spec=spec, record=False
+        )
 
     def _resolve_plugin(self, url: str) -> PluginSpec | None:
         if self._store is None:

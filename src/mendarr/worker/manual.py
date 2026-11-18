@@ -67,6 +67,9 @@ class ManualSessions:
         self.executor = executor  # runs the auto-solve plugin (worker.executor.Executor.solve_live)
         self._sessions: dict[str, _Session] = {}
 
+    def count(self) -> int:
+        return len(self._sessions)
+
     async def start(self, req: ManualStart) -> ManualStarted:
         stack = contextlib.AsyncExitStack()
         try:
@@ -77,8 +80,10 @@ class ManualSessions:
         context = None
         try:
             egress = await self.egress.current(req.proxy)
-            browser = await self.pool.browser(slot, req.backend)
-            context = await browser.new_context(proxy=pw_proxy(req.proxy))
+            browser = await self.pool.browser(slot, req.backend, req.locale, req.proxy)
+            context = await browser.new_context(
+                proxy=pw_proxy(req.proxy), **self.pool.context_options(slot, req.backend, req.locale, req.proxy)
+            )
             demo = DemoRecorder()
             await demo.install(context)
             page = await context.new_page()
@@ -94,7 +99,7 @@ class ManualSessions:
                 demo=demo,
                 stack=stack,
                 egress=egress,
-                user_agent=self.pool.user_agent(slot, req.backend),
+                user_agent=self.pool.user_agent(slot, req.backend, req.proxy),
             )
             context.on("page", lambda p: self._on_new_page(s, p))
         except BaseException:

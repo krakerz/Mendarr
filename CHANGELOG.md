@@ -5,11 +5,25 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] — 2026-11-18
+
+### Added
+- Settings: backend switch order for the healer's backend switches; the manual solve picker follows it
+- "Browser language" on the Settings page (`solver.locale` in `mendarr.yml`, e.g. `en-US`): one language for every backend, overriding `MENDARR_LOCALE`. Empty keeps the old behaviour (`MENDARR_LOCALE`, else the exit country's main language). A browser picks a changed language up on its next launch; one with an open session or manual solve keeps its language until it is free.
+
+- Settings → Browser backends: shows the installed and latest obscura binary and Camoufox browser build and updates them from their GitHub releases without rebuilding the image (verified with a test launch, kept on the worker's `/data/backends` volume, Revert goes back to the previous or built-in one). A Camoufox update restarts the worker once no solve, session or manual solve is open; "Restart now" does it at once and closes them. `MENDARR_BACKEND_AUTO_UPDATE=true` on the worker does it on its own (`MENDARR_BACKEND_UPDATE_INTERVAL`, default 24h). patchright's Chromium still comes with the image.
+
+### Fixed
+- An obscura solve or manual solve with its own proxy left through the worker's default proxy (obscura ignores per-context proxies). It now runs on an obscura process started with that proxy (one per slot next to the default one), and a dead request proxy fails with "Upstream proxy … failed" like on Camoufox.
+- The obscura backend behind a SOCKS5 upstream proxy looked host names up itself instead of at the proxy, so sites the worker can't resolve on its own failed with "error resolving for socks proxy". It now uses `socks5h://` like Camoufox and the cookie check.
+- Cookies from a healer, agent (MCP) or plugin-test replay that clears a challenge are now cached. They were thrown away, so after a fix was promoted the next client request had to solve the same challenge again with the new plugin version.
+- Camoufox sometimes rendered pages in another language than the exit country's main one (e.g. Chinese on an Australian exit): its GeoIP option picks the browser language at random, weighted by the share of speakers. Mendarr now pins the country's main language (`en-AU`) on every backend (Camoufox, patchright, obscura), so every browser launch looks the same. `MENDARR_LOCALE` sets a fixed language for all of them instead.
+- Saving the healer budgets on the Settings page no longer writes the current poll interval, LLM wait, give-up time and replay timeout into `mendarr.yml`. Those fields are now empty unless the file sets them, with the default as a grey placeholder, so a changed default (such as the 120 s replay timeout in 1.0.0) applies. A value saved earlier stays: clear the field and save to go back to the default.
+
 ## [1.0.0] — 2026-11-18
 
 ### Added
 - Time limit for background cookie re-solves: `cookies.refresh_timeout` in `mendarr.yml` and "Solve timeout" on the Settings page (default `60s`, minimum `10s`). It was fixed at 60 s.
-
 - Backend picker (camoufox or patchright) next to "Solve manually" on the incident page; before, a manual solve from an incident always used camoufox.
 - Default backend for automated solves: `MENDARR_DEFAULT_BACKEND` (`camoufox`, `patchright` or `obscura`; default `camoufox`), `solver.default_backend` in `mendarr.yml` and a "Solver" card on the Settings page. It applies to every plugin that sets no `backend` in its `META`, including the builtin `_default`; a plugin's own backend always wins. The manual-solve pickers preselect it when it is camoufox or patchright. Plugins without a backend show `default` in the Backend column.
 

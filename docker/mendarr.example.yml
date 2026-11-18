@@ -11,7 +11,7 @@ healer:
   trace_min_interval_s: 30  # at most one trace per domain in this time
   give_up_after: 7d         # a manual incident is closed as gave_up after this
   cross_replay_max: 5       # other open incidents a new plugin is replayed on
-  replay_timeout_s: 60
+  replay_timeout_s: 120     # budget of each healer/agent/plugin-test replay
 
 escalation:
   auto_attempts: 2          # 1 = replay the active plugin, 2 = also with the other browser backend
@@ -43,6 +43,23 @@ llm:
       reasoning_effort: none                   # "none" turns Gemma 4 thinking off in LM Studio
       max_tokens: 6144
       dom_chars: 12000
+
+# solver:                     # optional; also on the Settings page (Solver card)
+  # default_backend: camoufox   # camoufox | patchright | obscura, for plugins without their own backend; overrides MENDARR_DEFAULT_BACKEND
+  # backend_order: [camoufox, patchright, obscura]   # order the healer switches a failing plugin's backend in; leave one out to skip it; manual solve lists backends in this order
+  # locale: en-US             # browser language for every backend; overrides MENDARR_LOCALE (unset = exit country's main language)
+
+# cookies:                    # optional; unset = the environment value
+  # refresh_interval: 0       # background cookie re-check, e.g. 6h; 0 = off; overrides MENDARR_COOKIE_REFRESH_INTERVAL
+  # refresh_idle_days: 7      # skip domains nobody asked for in this many days
+  # refresh_timeout: 60s      # budget of one background re-solve (minimum 10s)
+
+# updates:                    # optional
+  # check: true               # look for a new Mendarr release; overrides MENDARR_UPDATE_CHECK
+  # interval: 24h             # minimum 1h
+
+# Browser backend updates (obscura / Camoufox builds) are set on the worker, not here: MENDARR_BACKEND_AUTO_UPDATE,
+# MENDARR_BACKEND_UPDATE_INTERVAL, and the /data/backends volume (see docker/compose.example.yml).
 
 notify:
   discord_webhook: "${MENDARR_DISCORD_WEBHOOK}"

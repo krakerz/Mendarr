@@ -360,3 +360,15 @@ async def test_healer_tracking_during_work(env):
     assert seen_in_replay[0]["domain"] == "example.com"
     assert "auto attempt" in seen_in_replay[0]["description"]
     assert tracker.count() == 0  # Finished and cleaned up
+
+
+async def test_backend_switch_follows_the_configured_order(env):
+    yaml = BASE_YAML.replace("auto_attempts: 0", "auto_attempts: 2") + "solver: {backend_order: [camoufox, obscura]}\n"
+    healer = env.make(base=yaml)
+    await env.fail()
+    env.worker.solve_results = [stuck(), ok()]
+    await healer.tick()
+    inc = only_incident(env)
+    assert [a["result"] for a in env.store.attempts(inc["id"])] == ["retry_failed", "switch_passed"]
+    active = env.store.active("example.com")
+    assert active is not None and active.backend == "obscura"

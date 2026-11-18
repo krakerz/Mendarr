@@ -5,12 +5,17 @@ import contextlib
 import logging
 import os
 import shutil
+from pathlib import Path
 from typing import Any
+from urllib.parse import urlsplit
 
 from mendarr.config import Settings
-from mendarr.proxy import redact
+from mendarr.proxy import curl_proxy_url, redact
+from mendarr.rpc import ProxySpec
+from mendarr.worker import integrity
 from mendarr.worker.backends import BackendUnavailable, UpstreamUnreachable
 from mendarr.worker.backends.camoufox import LaunchedBrowser
+from mendarr.worker.locale import resolve_locale
 
 log = logging.getLogger("mendarr.worker.backends.obscura")
 
@@ -18,6 +23,7 @@ _launch_locks: dict[int, asyncio.Lock] = {}
 
 # obscura serve ports: base + slot number (e.g., 9222, 9223, ...)
 _OBSCURA_BASE_PORT = 9222
+_PROXY_PORT_OFFSET = 100  # request-proxy obscura processes: 9322 + slot
 
 
 def _get_launch_lock(slot: int) -> asyncio.Lock:
@@ -27,8 +33,31 @@ def _get_launch_lock(slot: int) -> asyncio.Lock:
     return _launch_locks[slot]
 
 
-async def _find_obscura_binary() -> str:
-    """Find the obscura binary in PATH or common locations."""
+async def _check_proxy(proxy: ProxySpec, timeout: float = 5.0) -> None:
+    """TCP preflight of a request proxy: obscura's own failure for a dead proxy is an opaque page error."""
+    parts = urlsplit(proxy.url if "://" in proxy.url else f"http://{proxy.url}")
+    default_port = 1080 if parts.scheme.startswith("socks") else 443 if parts.scheme == "https" else 8080
+    try:
+        _, writer = await asyncio.wait_for(
+            asyncio.open_connection(parts.hostname, parts.port or default_port), timeout
+        )
+    except (OSError, TimeoutError) as e:
+        raise UpstreamUnreachable(f"Upstream proxy {redact(proxy.url)} failed: {e or type(e).__name__}") from e
+    writer.close()
+    with contextlib.suppress(Exception):
+        await writer.wait_closed()
+
+
+async def _find_obscura_binary(settings: Settings) -> str:
+    """Find the obscura binary: an updated build in the backends dir first, then PATH or common locations."""
+    overlay = Path(settings.backends_dir) / "obscura" / "current" / "obscura"
+    if overlay.is_file() and os.access(overlay, os.X_OK):
+        # the volume is writable: use the updated binary only while it matches its manifest (hashed in a thread)
+        bad = await asyncio.to_thread(integrity.verify_manifest, overlay.parent.resolve(), only=["obscura"])
+        if bad is None:
+            integrity.FAILED.pop("obscura", None)
+            return str(overlay)
+        integrity.fail("obscura", bad)
     # Check PATH first
     binary = shutil.which("obscura")
     if binary:
@@ -48,7 +77,14 @@ async def _find_obscura_binary() -> str:
     )
 
 
-async def launch(display: int, *, settings: Settings, exit_ip: Any = None) -> LaunchedBrowser:
+async def launch(
+    display: int,
+    *,
+    settings: Settings,
+    exit_ip: Any = None,
+    locale: str | None = None,
+    proxy: ProxySpec | None = None,
+) -> LaunchedBrowser:
     """
     Launch obscura CDP server and connect to it via Playwright.
 
@@ -61,11 +97,17 @@ async def launch(display: int, *, settings: Settings, exit_ip: Any = None) -> La
         LaunchedBrowser with connected Playwright browser, user agent, and close function
     """
     # Obscura doesn't use X displays; we use the display number to pick a unique CDP port
-    cdp_port = _OBSCURA_BASE_PORT + display
+    # (a request-proxy process gets its own port range: one per slot next to the default one)
+    cdp_port = _OBSCURA_BASE_PORT + display + (_PROXY_PORT_OFFSET if proxy is not None else 0)
     cdp_endpoint = f"ws://127.0.0.1:{cdp_port}/devtools/browser"
 
-    binary = await _find_obscura_binary()
-    upstream = settings.upstream
+    binary = await _find_obscura_binary(settings)
+    if proxy is not None:
+        await _check_proxy(proxy)  # a dead proxy fails here, named, instead of as an opaque page error
+    # the default upstream's exit IP says nothing about a request proxy's country
+    locale = await resolve_locale(settings, None if proxy is not None else exit_ip, locale)  # applied through the context's locale option
+    log.info("obscura on display :%s: locale %s", display, locale or "default")
+    upstream = proxy if proxy is not None else (settings.upstream.spec() if settings.upstream else None)
 
     # Build obscura serve command
     cmd = [
@@ -79,10 +121,11 @@ async def launch(display: int, *, settings: Settings, exit_ip: Any = None) -> La
 
     if upstream is not None:
         # obscura accepts --proxy for HTTP/SOCKS5
-        cmd.extend(["--proxy", upstream.httpx_url()])
+        # socks5h: DNS at the proxy, like Camoufox (socks_remote_dns) and the curl check; plain socks5 resolves here
+        cmd.extend(["--proxy", curl_proxy_url(upstream)])
 
     # Launch obscura subprocess
-    safe_cmd = [redact(arg) if arg.startswith(("http://", "https://", "socks5://")) else arg for arg in cmd]
+    safe_cmd = [redact(arg) if arg.startswith(("http://", "https://", "socks5://", "socks5h://")) else arg for arg in cmd]
     log.info("Starting obscura on port %d: %s", cdp_port, " ".join(safe_cmd))
     proc = await asyncio.create_subprocess_exec(
         *cmd,
@@ -124,7 +167,7 @@ async def launch(display: int, *, settings: Settings, exit_ip: Any = None) -> La
         await pw.stop()
         await _terminate_process(proc)
 
-    return LaunchedBrowser(browser, ua, close)
+    return LaunchedBrowser(browser, ua, close, locale, base_contexts=len(browser.contexts))
 
 
 async def _wait_for_cdp(endpoint: str, timeout: float = 30.0) -> None:
