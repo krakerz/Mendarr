@@ -5,6 +5,23 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.0] — 2026-11-18
+
+### Added
+- Time limit for background cookie re-solves: `cookies.refresh_timeout` in `mendarr.yml` and "Solve timeout" on the Settings page (default `60s`, minimum `10s`). It was fixed at 60 s.
+
+- Backend picker (camoufox or patchright) next to "Solve manually" on the incident page; before, a manual solve from an incident always used camoufox.
+- Default backend for automated solves: `MENDARR_DEFAULT_BACKEND` (`camoufox`, `patchright` or `obscura`; default `camoufox`), `solver.default_backend` in `mendarr.yml` and a "Solver" card on the Settings page. It applies to every plugin that sets no `backend` in its `META`, including the builtin `_default`; a plugin's own backend always wins. The manual-solve pickers preselect it when it is camoufox or patchright. Plugins without a backend show `default` in the Backend column.
+
+### Changed
+- Healer, agent (MCP) and plugin-test replays get 120 s by default (`healer.replay_timeout_s`, "Replay timeout" on the Settings page) instead of 60 s, which cut slow challenges off before a client's own 90–150 s limit.
+
+### Fixed
+- A client that sends the same proxy Mendarr already uses as `MENDARR_PROXY_URL` (e.g. Jackett with its proxy setting) now shares the cookie cache with it: its cookies are stored under the proxy's exit IP instead of a separate `proxy:` key, so the background cookie refresher keeps them fresh instead of skipping them as "other egress". Entries cached under the old `proxy:` key are no longer used; delete them on the Cookies page. Update the API and the browser worker together: the worker now reports its proxy username so both sides pick the same cache key.
+
+### Docs
+- The README now documents `healer.replay_timeout_s`, the time limit for healer, agent (MCP) and plugin-test replays shown in incident details.
+
 ## [0.9.0] — 2026-11-13
 
 ### Added

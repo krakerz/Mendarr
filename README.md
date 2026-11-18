@@ -113,6 +113,7 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_UPDATE_CHECK` | `true` | Check GitHub for a newer published release and show a "New version available" card in the dashboard. `false` = no requests at all. Also on the Settings page |
 | `MENDARR_UPDATE_CHECK_INTERVAL` | `24h` | How often to check (`12h`, `1d`); minimum `1h`. The first check runs 60 s after start |
 | `MENDARR_UPDATE_RELEASES_URL` | GitHub's latest-release API URL of Mendarr | For testing only: read the latest release from this URL instead (same JSON shape: `tag_name`, `html_url`, `published_at`) |
+| `MENDARR_DEFAULT_BACKEND` | `camoufox` | Browser engine for automated solves whose plugin sets no `backend` (`camoufox`, `patchright` or `obscura`); `solver.default_backend` in `mendarr.yml` overrides it |
 | `MENDARR_PROXY_URL` | empty | Upstream proxy URL (`http://`, `https://`, `socks5://`) |
 | `MENDARR_PROXY_USERNAME` | empty | Username for upstream proxy (alternative to URL embedding) |
 | `MENDARR_PROXY_PASSWORD` | empty | Password for upstream proxy |
@@ -146,9 +147,16 @@ llm:
       api_key: "${MENDARR_LLM_KEY}"
       vision: true
 
+healer:
+  replay_timeout_s: 120s   # budget of each healer/agent/plugin-test replay (tier 0, 1 and 2; default 120s); also on the Settings page
+
 cookies:
   refresh_interval: 6h     # 0 = off; overrides MENDARR_COOKIE_REFRESH_INTERVAL
   refresh_idle_days: 7
+  refresh_timeout: 90s     # budget of one background re-solve (default 60s, minimum 10s)
+
+solver:
+  default_backend: patchright   # camoufox | patchright | obscura; for plugins without their own backend; overrides MENDARR_DEFAULT_BACKEND
 
 updates:
   check: true              # overrides MENDARR_UPDATE_CHECK

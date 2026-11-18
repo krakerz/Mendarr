@@ -95,6 +95,15 @@ async def test_proxy_key_hides_credentials(router, worker, cache):
     assert len(worker.calls_of("check")) == 1
 
 
+async def test_upstream_request_proxy_uses_exit_ip_key(router, worker, cache):
+    # Jackett sends the same proxy the worker already uses: the entry is the exit IP's, shared with the refresher
+    worker.egress_proxy = "http://192.168.1.6:8888"
+    cache.put("example.com", "203.0.113.7", UA, challenge_result(URL).snapshot.cookies)
+    out = await router.request(params(proxy=ProxySpec(url="http://192.168.1.6:8888")))
+    assert out.via == "cache_hit" and out.egress == "203.0.113.7"
+    assert worker.calls_of("solve") == []
+
+
 async def test_session_bypasses_cache(router, worker, cache):
     worker.solve_results.append(challenge_result(URL))
     out = await router.request(params(session="s1"))
@@ -230,6 +239,15 @@ async def test_refresh_challenged_solved(router, worker, cache):
     worker.solve_results.append(challenge_result(URL))
     assert await router.refresh(e, renew_before=0) == "solved"
     assert worker.calls_of("solve")[0].background is True
+    assert 59 < worker.calls_of("solve")[0].timeout_s <= 60  # default budget
+
+
+async def test_refresh_timeout_is_configurable(router, worker, cache):
+    e = _entry(cache)
+    worker.check_results.append(CHALLENGED)
+    worker.solve_results.append(challenge_result(URL))
+    assert await router.refresh(e, renew_before=0, timeout_s=90) == "solved"
+    assert 60 < worker.calls_of("solve")[0].timeout_s <= 90
     assert len(cache.entries()) == 1
 
 
@@ -318,3 +336,14 @@ async def test_background_failure_hook_without_record(worker, cache, tmp_path):
     await r.refresh(e, renew_before=0)
     assert r.hooks.calls == []
     store.close()
+
+
+async def test_solve_carries_configured_default_backend(worker, cache):
+    r = Router(Settings(), worker, cache, default_backend=lambda: "patchright")
+    await r.request(params())
+    assert worker.calls_of("solve")[0].default_backend == "patchright"
+
+
+async def test_solve_without_default_backend_hook(router, worker):
+    await router.request(params())
+    assert worker.calls_of("solve")[0].default_backend is None

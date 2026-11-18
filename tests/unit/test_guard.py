@@ -25,7 +25,12 @@ def test_accepts_valid():
 
 def test_builtin_default_passes():
     src = resources.files("mendarr.plugins.builtin").joinpath("_default.py").read_text()
-    assert check(src).meta["backend"] == "camoufox"
+    assert "backend" not in check(src).meta  # follows the configured default
+
+
+def test_meta_without_backend_is_not_mutated():
+    src = 'META = {"notes": "x"}\n\n\nasync def solve(page, ctx):\n    pass\n'
+    assert check(src).meta == {"notes": "x"}
 
 
 def test_design_example_passes():

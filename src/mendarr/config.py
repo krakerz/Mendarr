@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     # background re-check of cached cookies: "6h", "90m", "1h"; empty or 0 = off (mendarr.yml `cookies:` overrides both)
     cookie_refresh_interval: str = ""
     cookie_refresh_idle_days: float = 7.0
+    # backend for automated solves whose plugin sets no META["backend"]: camoufox | patchright | obscura
+    # (mendarr.yml `solver:` overrides it)
+    default_backend: str = Field("camoufox", validation_alias=_env("DEFAULT_BACKEND"))
     # update checker: asks GitHub for the latest published release (mendarr.yml `updates:` overrides both)
     update_check: bool = True
     update_check_interval: str = "24h"  # minimum 1h

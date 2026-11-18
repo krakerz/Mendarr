@@ -8,7 +8,7 @@ from collections.abc import Callable
 
 import httpx
 
-from mendarr.proxy import UpstreamProxy, redact
+from mendarr.proxy import UpstreamProxy, is_upstream, redact
 from mendarr.rpc import EgressInfo, ProxySpec
 
 log = logging.getLogger("mendarr.worker.egress")
@@ -34,6 +34,7 @@ class Egress:
         self._transport = transport
         self._upstream = upstream
         self._via = str(upstream) if upstream else None
+        self._via_user = upstream.username if upstream else None
         self._country_url = country_url
         self._stored: EgressInfo | None = None
         self._lock = asyncio.Lock()
@@ -43,10 +44,10 @@ class Egress:
 
     async def info(self) -> EgressInfo:
         if not self._url:
-            return EgressInfo(ip="default", proxy=self._via)
+            return EgressInfo(ip="default", proxy=self._via, proxy_user=self._via_user)
         if self._stored is not None:
             return self._stored
-        return EgressInfo(ip="unknown", proxy=self._via)
+        return EgressInfo(ip="unknown", proxy=self._via, proxy_user=self._via_user)
 
     async def run(self) -> None:
         self._running = True
@@ -106,7 +107,9 @@ class Egress:
         if prev is not None and prev.ip != ip:
             log.info("egress IP changed: %s -> %s", prev.ip, ip)
         log.debug("egress refresh: ip=%s country=%s (was %s)", ip, country, prev.ip if prev else None)
-        self._stored = EgressInfo(ip=ip, checked_at=self._clock(), proxy=self._via, country=country)
+        self._stored = EgressInfo(
+            ip=ip, checked_at=self._clock(), proxy=self._via, proxy_user=self._via_user, country=country
+        )
         return True
 
     def _wants_country(self, ip: str) -> bool:
@@ -137,6 +140,6 @@ class Egress:
         return (await self.info()).ip
 
     async def current(self, proxy: ProxySpec | None = None) -> str:
-        if proxy is not None:
+        if proxy is not None and not is_upstream(proxy, self._via, self._via_user):
             return f"proxy:{redact(proxy.url)}"
         return (await self.info()).ip

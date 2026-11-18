@@ -19,7 +19,8 @@ META = {"backend": "camoufox", "notes": "e2e: always fails"}
 async def solve(page: Page, ctx: Ctx) -> None:
     raise RuntimeError("broken on purpose")
 '''
-PATCHRIGHT_SRC = DEFAULT_SRC.replace('"backend": "camoufox"', '"backend": "patchright"')
+PATCHRIGHT_SRC = DEFAULT_SRC.replace("META = {", 'META = {"backend": "patchright", ', 1)
+assert '"backend": "patchright"' in PATCHRIGHT_SRC  # the builtin's META changed: fix the replace above
 EVIL_SRC = "import os\n" + BROKEN_SRC
 
 

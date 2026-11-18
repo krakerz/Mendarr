@@ -8,6 +8,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from mendarr.api.auth import require_user
 from mendarr.core.manual import ManualError, ManualManager, ManualSession
+from mendarr.healer.config import default_backend
 from mendarr.web import error_page, render
 
 router = APIRouter(prefix="/ui", dependencies=[Depends(require_user)])
@@ -28,9 +29,9 @@ def _session(request: Request, sid: str) -> ManualSession | None:
 
 
 @router.post("/incidents/{iid}/manual")
-async def start_manual(request: Request, iid: int) -> Response:
+async def start_manual(request: Request, iid: int, backend: str = Form("camoufox")) -> Response:
     try:
-        s = await _manager(request).start(iid)
+        s = await _manager(request).start(iid, backend=backend.strip())
     except ManualError as e:
         return _go(request, f"/ui/manual?error={quote(str(e))}")
     return _go(request, f"/ui/manual/{s.id}")
@@ -53,7 +54,15 @@ async def clear_manual_sessions(request: Request) -> Response:
 
 @router.get("/manual", response_class=HTMLResponse)
 async def list_manual(request: Request, error: str = "") -> Response:
-    return render(request, "manual_list.html", active="manual", sessions=_manager(request).sessions(), error=error)
+    st = request.app.state
+    return render(
+        request,
+        "manual_list.html",
+        active="manual",
+        sessions=_manager(request).sessions(),
+        error=error,
+        default_backend=default_backend(st.settings, st.config_file.get()),
+    )
 
 
 @router.get("/manual/{sid}", response_class=HTMLResponse)

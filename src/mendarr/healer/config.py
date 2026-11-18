@@ -18,6 +18,7 @@ from pydantic import (
 )
 
 from mendarr.config import Settings
+from mendarr.plugins.guard import BACKENDS, DEFAULT_BACKEND
 
 log = logging.getLogger(__name__)
 _DUR = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$")
@@ -107,7 +108,7 @@ class HealerTuning(_Model):
     trace_min_interval_s: Duration = 30
     give_up_after: Duration = 604800
     cross_replay_max: int = 5
-    replay_timeout_s: Duration = 60
+    replay_timeout_s: Duration = 120
 
 
 class LlmConfig(_Model):
@@ -149,6 +150,11 @@ class DomainPolicy:
 class CookieConfig(_Model):
     refresh_interval: Duration | None = None  # None = MENDARR_COOKIE_REFRESH_INTERVAL; 0 = off
     refresh_idle_days: float | None = Field(None, ge=0)  # None = MENDARR_COOKIE_REFRESH_IDLE_DAYS
+    refresh_timeout: Duration = Field(60, ge=10)  # budget of one background re-solve
+
+
+class SolverConfig(_Model):
+    default_backend: Literal["camoufox", "patchright", "obscura"] | None = None  # None = MENDARR_DEFAULT_BACKEND
 
 
 class UpdatesConfig(_Model):
@@ -162,6 +168,7 @@ class HealerConfig(_Model):
     llm: LlmConfig = LlmConfig()
     notify: NotifyConfig = NotifyConfig()
     cookies: CookieConfig = CookieConfig()
+    solver: SolverConfig = SolverConfig()
     updates: UpdatesConfig = UpdatesConfig()
     domains: dict[str, DomainOverride] = {}
 
@@ -209,6 +216,21 @@ def refresh_policy(settings: Settings, cfg: HealerConfig) -> tuple[float, float]
         interval = max(interval, MIN_REFRESH_S)
     idle = c.refresh_idle_days if c.refresh_idle_days is not None else settings.cookie_refresh_idle_days
     return interval, idle
+
+
+def default_backend(settings: Settings, cfg: HealerConfig) -> str:
+    """Backend for plugins without an explicit META backend: mendarr.yml, else the environment, else camoufox."""
+    if cfg.solver.default_backend is not None:
+        return cfg.solver.default_backend
+    if settings.default_backend in BACKENDS:
+        return settings.default_backend
+    log.error(
+        "MENDARR_DEFAULT_BACKEND=%r is not one of %s; using %s",
+        settings.default_backend,
+        ", ".join(BACKENDS),
+        DEFAULT_BACKEND,
+    )
+    return DEFAULT_BACKEND
 
 
 MIN_UPDATE_S = 3600.0

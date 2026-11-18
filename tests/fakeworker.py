@@ -50,6 +50,8 @@ class FakeWorker:
     def __init__(self) -> None:
         self.ua = UA
         self.egress_ip = "203.0.113.7"
+        self.egress_proxy: str | None = None
+        self.egress_proxy_user: str | None = None
         self.egress_country: str | None = None
         self.version = __version__
         self.solve_results: list[SolveResult] = []
@@ -95,7 +97,10 @@ class FakeWorker:
         return self.sessions.pop(session_id, None) is not None
 
     async def egress(self) -> EgressInfo:
-        return EgressInfo(ip=self.egress_ip, checked_at=1700000000.0, country=self.egress_country)
+        return EgressInfo(
+            ip=self.egress_ip, checked_at=1700000000.0, country=self.egress_country,
+            proxy=self.egress_proxy, proxy_user=self.egress_proxy_user,
+        )
 
     async def aclose(self) -> None:
         pass

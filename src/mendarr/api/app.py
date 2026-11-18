@@ -24,7 +24,7 @@ from mendarr.core.stats import DomainStats, StatsHooks
 from mendarr.core.traces import TraceStore
 from mendarr.core.tracker import SolveTracker
 from mendarr.core.updates import UpdateChecker
-from mendarr.healer.config import ConfigFile, config_path
+from mendarr.healer.config import ConfigFile, config_path, default_backend
 from mendarr.healer.loop import Healer
 from mendarr.healer.notify import Notifier
 from mendarr.plugins.store import PluginStore, RollbackPolicy
@@ -49,7 +49,15 @@ def create_app(
     traces = TraceStore.open(Path(settings.data_dir) / "traces")
     config_file = ConfigFile(config_path(settings))
     tracker = SolveTracker()
-    router = Router(settings, worker, cache, store=store, tracker=tracker, stats=stats)
+    router = Router(
+        settings,
+        worker,
+        cache,
+        store=store,
+        tracker=tracker,
+        stats=stats,
+        default_backend=lambda: default_backend(settings, config_file.get()),
+    )
     healer = Healer(
         settings, store, router, traces, config_file, notifier=Notifier(public_url=settings.public_url), tracker=tracker
     )

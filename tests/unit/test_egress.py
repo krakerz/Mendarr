@@ -277,3 +277,12 @@ async def test_empty_country_url_disables_lookup():
     e = egress(handler, country_url=None)
     await e.refresh()
     assert (await e.info()).country is None
+
+
+async def test_request_proxy_equal_to_upstream_uses_exit_ip():
+    up = parse_upstream("http://192.168.1.6:8888")
+    e = Egress("", upstream=up)  # no lookup URL: the exit is reported as "default"
+    assert await e.current(ProxySpec(url="http://192.168.1.6:8888")) == "default"
+    assert await e.current(ProxySpec(url="http://other:8888")) == "proxy:http://other:8888"
+    info = await e.info()
+    assert info.proxy == "http://192.168.1.6:8888" and info.proxy_user is None

@@ -76,6 +76,7 @@ class SolveRequest(BaseModel):
     screenshot: bool = False
     plugin: PluginSpec | None = None  # None = the worker's builtin _default
     trace: bool = False  # attach TraceData when the run fails or ends on a challenge/block page
+    default_backend: str | None = None  # for plugins without META["backend"]; None = the worker's camoufox
     background: bool = False  # cookie refresher: answer no_slot at once instead of queueing behind real requests
 
 
@@ -175,6 +176,7 @@ class EgressInfo(BaseModel):
     proxy: str | None = None  # upstream proxy as scheme://host:port; None = direct
     country: str | None = None  # 2-letter ISO country code (e.g. "RO", "JP"); None = unasserted
     stale: bool = False  # the last refresh failed; ip/country are from the last good lookup
+    proxy_user: str | None = None  # the upstream's username (never the password), to match a request proxy
 
 
 class WorkerInfo(BaseModel):

@@ -21,7 +21,11 @@
       <button class="btn btn-sm btn-danger">{{ m.icon("x") }} Close as gave up</button></form>
     {% endif %}
     {% if can_manual %}
-    <form method="post" action="/ui/incidents/{{ inc.id }}/manual">{{ m.csrf_field() }}
+    <form method="post" action="/ui/incidents/{{ inc.id }}/manual" style="display: inline-flex; gap: 6px; align-items: center;">{{ m.csrf_field() }}
+      <select name="backend" aria-label="Manual solve backend" style="height: 30px;">
+        <option value="camoufox"{% if default_backend != "patchright" %} selected{% endif %}>camoufox (Firefox)</option>
+        <option value="patchright"{% if default_backend == "patchright" %} selected{% endif %}>patchright (Chromium)</option>
+      </select>
       <button class="btn btn-sm btn-primary">{{ m.icon("mouse-pointer-click") }} Solve manually</button></form>
     {% endif %}
     {% if closed %}

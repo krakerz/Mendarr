@@ -23,7 +23,8 @@ def builtin_source() -> str:
 def test_load_builtin_default():
     p = loader.load_builtin("_default")
     assert p.ref == "_default@builtin"
-    assert p.meta["backend"] == "camoufox"
+    assert "backend" not in p.meta
+    assert p.backend is None
 
 
 def test_load_spec_none_is_builtin_default():
@@ -35,7 +36,7 @@ def test_load_spec_none_is_builtin_default():
 def test_load_spec_builtin_source():
     p = loader.load_spec(spec_for(builtin_source(), "_default", 1))
     assert p.ref == "_default@v1"
-    assert p.backend == "camoufox"
+    assert p.backend is None
     assert inspect.iscoroutinefunction(p.solve)
 
 
@@ -61,7 +62,7 @@ def test_load_time_error():
 
 
 def test_backend_from_meta():
-    src = builtin_source().replace('"camoufox"', '"patchright"', 1)
+    src = builtin_source().replace("META = {", 'META = {"backend": "patchright", ', 1)
     assert '"patchright"' in src
     assert loader.load_spec(spec_for(src)).backend == "patchright"
 

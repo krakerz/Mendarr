@@ -67,11 +67,14 @@ class Executor:
         except loader.PluginLoadError as e:
             log.warning("plugin rejected: %s", e)
             return SolveResult(plugin=ref, egress=egress, error=WorkerError(type="guard", detail=str(e)))
-        backend = plugin.backend
+        backend = plugin.backend or req.default_backend or backends.DEFAULT_BACKEND
+        if backend not in backends.BACKENDS:
+            log.warning("unknown backend %r for %s; using %s", backend, plugin.ref, backends.DEFAULT_BACKEND)
+            backend = backends.DEFAULT_BACKEND
         if req.session and backend != backends.DEFAULT_BACKEND:
             # a session is a context in the camoufox browser; it can't move to another engine
             log.info(
-                "session %s stays on %s although %s asks for %s",
+                "session %s stays on %s although %s runs on %s",
                 req.session,
                 backends.DEFAULT_BACKEND,
                 plugin.ref,

@@ -32,8 +32,8 @@
     <div class="field" style="flex: 1; min-width: 160px;">
       <label for="manual-backend">Backend Engine</label>
       <select id="manual-backend" name="backend" style="width: 100%;">
-        <option value="camoufox">camoufox (Firefox)</option>
-        <option value="patchright">patchright (Chromium)</option>
+        <option value="camoufox"{% if default_backend != "patchright" %} selected{% endif %}>camoufox (Firefox)</option>
+        <option value="patchright"{% if default_backend == "patchright" %} selected{% endif %}>patchright (Chromium)</option>
       </select>
     </div>
     <button class="btn btn-primary" style="height: var(--h);">{{ m.icon("play") }} Launch live browser</button>
