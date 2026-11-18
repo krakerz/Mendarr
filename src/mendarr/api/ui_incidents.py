@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from mendarr.api.auth import require_user
-from mendarr.healer.config import default_backend
+from mendarr.api.ui_manual import picker_context
 from mendarr.plugins.store import OPEN_INCIDENTS
 from mendarr.web import error_page, render
 
@@ -104,7 +104,7 @@ def incident_page(request: Request, iid: int) -> Response:
         plugin_scope=mt.group("scope") if mt else None,
         can_manual=bool(inc["state"] in OPEN_INCIDENTS and inc["url"]),
         closed=inc["state"] in ("solved", "gave_up"),
-        default_backend=default_backend(st.settings, st.config_file.get()),
+        **picker_context(st),
     )
 
 

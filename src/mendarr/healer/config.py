@@ -14,6 +14,7 @@ from pydantic import (
     ConfigDict,
     Field,
     ValidationError,
+    field_validator,
     model_validator,
 )
 
@@ -23,6 +24,7 @@ from mendarr.plugins.guard import BACKENDS, DEFAULT_BACKEND
 log = logging.getLogger(__name__)
 _DUR = re.compile(r"^\s*(\d+(?:\.\d+)?)\s*([smhd]?)\s*$")
 _UNIT = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+LOCALE_TAG = re.compile(r"^[A-Za-z]{2,3}(-[A-Za-z0-9]{2,8})*$")
 _ENV = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)\}")
 
 
@@ -155,6 +157,24 @@ class CookieConfig(_Model):
 
 class SolverConfig(_Model):
     default_backend: Literal["camoufox", "patchright", "obscura"] | None = None  # None = MENDARR_DEFAULT_BACKEND
+    locale: str | None = None  # browser language tag; None = the worker's MENDARR_LOCALE / exit country's language
+    backend_order: list[Literal["camoufox", "patchright", "obscura"]] | None = None  # None = BACKENDS order
+
+    @field_validator("backend_order")
+    @classmethod
+    def _order_valid(cls, v: list[str] | None) -> list[str] | None:
+        if v is not None and not v:
+            raise ValueError("backend_order must list at least one backend (or be left out)")
+        if v is not None and len(set(v)) != len(v):
+            raise ValueError(f"backend_order lists a backend twice: {', '.join(v)}")
+        return v
+
+    @field_validator("locale")
+    @classmethod
+    def _locale_tag(cls, v: str | None) -> str | None:
+        if v is not None and not LOCALE_TAG.match(v):
+            raise ValueError(f"bad language tag {v!r}: use e.g. en, en-US or zh-Hant-TW")
+        return v
 
 
 class UpdatesConfig(_Model):
@@ -216,6 +236,16 @@ def refresh_policy(settings: Settings, cfg: HealerConfig) -> tuple[float, float]
         interval = max(interval, MIN_REFRESH_S)
     idle = c.refresh_idle_days if c.refresh_idle_days is not None else settings.cookie_refresh_idle_days
     return interval, idle
+
+
+def configured_locale(cfg: HealerConfig) -> str | None:
+    """The Settings-page browser language for the worker; None = no override (worker's env / exit country)."""
+    return cfg.solver.locale or None
+
+
+def backend_order(cfg: HealerConfig) -> tuple[str, ...]:
+    """Order the healer switches a failing plugin's backend in; backends left out are never switched to."""
+    return tuple(cfg.solver.backend_order) if cfg.solver.backend_order else BACKENDS
 
 
 def default_backend(settings: Settings, cfg: HealerConfig) -> str:

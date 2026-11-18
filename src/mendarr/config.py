@@ -37,6 +37,12 @@ class Settings(BaseSettings):
     update_check_interval: str = "24h"  # minimum 1h
     # for testing only: where the latest release is read from (GitHub's "latest release" JSON shape)
     update_releases_url: str = "https://api.github.com/repos/krakerz/mendarr/releases/latest"
+    # worker: updated backend builds (obscura binary, Camoufox browser) live here; empty = image versions only
+    backends_dir: str = "/data/backends"
+    backend_auto_update: bool = False
+    backend_update_interval: str = "24h"  # minimum 1h
+    # for testing only: obscura's "latest release" JSON (GitHub shape)
+    obscura_releases_url: str = "https://api.github.com/repos/h4ckf0r0day/obscura/releases/latest"
     # FlareSolverr always returns {} here; real headers (Content-Encoding etc.) can confuse clients
     return_headers: bool = False
 
@@ -48,6 +54,8 @@ class Settings(BaseSettings):
     # country lookup for the exit IP ({ip} is substituted); empty = no country lookup
     egress_country_url: str = "https://api.country.is/{ip}"
     geoip: bool = True
+    # Camoufox language, e.g. en-US; empty = the exit country's main language (geoip) or Camoufox's default
+    locale: str = ""
     click_backend: Literal["auto", "xdotool", "mouse"] = "auto"
 
     # worker: upstream proxy for all outbound traffic (browsers, cookie check, egress lookup); empty = direct

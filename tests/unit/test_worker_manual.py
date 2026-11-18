@@ -33,7 +33,7 @@ class FakeBrowser:
         return True
 
 
-async def fake_launcher(slot):
+async def fake_launcher(slot, locale=None):
     async def close():
         pass
 

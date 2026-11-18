@@ -11,15 +11,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/* \
     && mkdir -p /tmp/.X11-unix && chmod 1777 /tmp/.X11-unix
 
-# Install obscura binary (latest release)
-RUN curl -fsSL "https://github.com/h4ckf0r0day/obscura/releases/latest/download/obscura-x86_64-linux.tar.gz" | tar -xz -C /usr/local/bin \
-    && chmod +x /usr/local/bin/obscura
+# Install obscura binary (latest release); the tag is recorded for the Settings -> Browser backends card
+RUN tag="$(curl -fsSLo /dev/null -w '%{url_effective}' https://github.com/h4ckf0r0day/obscura/releases/latest | sed 's#.*/tag/##')" \
+    && curl -fsSL "https://github.com/h4ckf0r0day/obscura/releases/download/${tag}/obscura-x86_64-linux.tar.gz" | tar -xz -C /usr/local/bin \
+    && chmod +x /usr/local/bin/obscura \
+    && mkdir -p /usr/local/share/mendarr && echo "$tag" > /usr/local/share/mendarr/obscura.version
 
-RUN useradd --create-home --uid 1000 mendarr && mkdir /app && chown mendarr /app
+RUN useradd --create-home --uid 1000 mendarr && mkdir /app && chown mendarr /app \
+    && mkdir -p /data/backends && chown -R mendarr /data
 USER mendarr
 
 # the venv must belong to the runtime user: camoufox/fpgen write their model into site-packages
-ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PATH="/app/.venv/bin:$PATH"
+ENV UV_COMPILE_BYTECODE=1 UV_LINK_MODE=copy PATH="/app/.venv/bin:$PATH" \
+    PLAYWRIGHT_BROWSERS_PATH=/home/mendarr/.cache/ms-playwright
 WORKDIR /app
 
 # deps first so source edits don't bust this layer

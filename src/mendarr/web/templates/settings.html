@@ -131,10 +131,10 @@
       </div>
       <label>Daily rounds max</label><input name="daily_rounds" value="{{ cfg.healer.daily_rounds }}">
       <label>Traces kept</label><input name="trace_keep" value="{{ cfg.healer.trace_keep }}">
-      <label>Poll interval</label><input name="poll_s" value="{{ dur.poll_s }}">
-      <label>LLM wait timeout</label><input name="llm_wait_s" value="{{ dur.llm_wait_s }}">
-      <label>Give up after</label><input name="give_up_after" value="{{ dur.give_up_after }}">
-      <label>Replay timeout</label><input name="replay_timeout_s" value="{{ dur.replay_timeout_s }}">
+      <label>Poll interval</label><input name="poll_s" value="{{ dur.poll_s }}" placeholder="{{ dur.defaults.poll_s }}">
+      <label>LLM wait timeout</label><input name="llm_wait_s" value="{{ dur.llm_wait_s }}" placeholder="{{ dur.defaults.llm_wait_s }}">
+      <label>Give up after</label><input name="give_up_after" value="{{ dur.give_up_after }}" placeholder="{{ dur.defaults.give_up_after }}">
+      <label>Replay timeout</label><input name="replay_timeout_s" value="{{ dur.replay_timeout_s }}" placeholder="{{ dur.defaults.replay_timeout_s }}">
       <label>Cross-replay max</label><input name="cross_replay_max" value="{{ cfg.healer.cross_replay_max }}">
       <span></span>
       <div>
@@ -182,6 +182,22 @@
         </select>
         <div class="muted" style="font-size: 0.8125rem;">Browser engine for automated solves whose plugin sets no backend of its own (a plugin's own backend always wins)</div>
       </div>
+      <label>Backend switch order</label>
+      <div>
+        {% set shown = solver.backend_order or solver.backends %}
+        {% for n in range(3) %}<input type="hidden" name="order_{{ n + 1 }}" value="{{ shown[n] if shown[n] is defined else '' }}">{% endfor %}
+        <div id="order-pills" data-all="{{ solver.backends|join(',') }}" data-order="{{ shown|join(',') }}" data-sprite="/ui/static/vendor/lucide/sprite.svg?v={{ asset_v }}">
+          <div class="order-pills"></div>
+          <div class="order-spare"></div>
+        </div>
+        <div class="muted" style="font-size: 0.8125rem; margin-top: 6px;">Drag a backend, or use its arrows, to change the order; the cross takes it out and the dashed buttons add one back. The healer switches a failing plugin to the next one; manual solve offers them in this order (never obscura, it has no live view).</div>
+        <script src="/ui/static/js/backend-order.js?v={{ asset_v }}" defer></script>
+      </div>
+      <label>Browser language</label>
+      <div>
+        <input name="locale" value="{{ solver.locale }}" placeholder="empty = worker setting / exit country's main language">
+        <div class="muted" style="font-size: 0.8125rem;">e.g. en-US; applies to every backend; a browser picks it up on its next launch (busy browsers with an open session or manual solve keep their language until they are free)</div>
+      </div>
       <span></span>
       <div>
         <button class="btn btn-primary">{{ m.icon("save") }} Save solver settings</button>
@@ -227,6 +243,78 @@
         </form>
       </div>
     </div>
+  </section>
+
+  <section id="backends" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("circle-arrow-up") }} Browser backends</h2>
+    </div>
+    {% set bv = backends_view %}
+    <div class="card-sub-row">
+      <div>
+        <div class="backends-status">
+          <span style="font-weight: 500; font-size: 0.875rem;">{% if bv is none %}Not checked yet{% else %}Auto update: {{ "on" if bv.auto_update else "off" }}{% endif %}</span>
+          <form method="post" action="/ui/settings/backends/check">
+            {{ m.csrf_field() }}
+            <button class="btn btn-sm">{{ m.icon("refresh-cw") }} Check now</button>
+          </form>
+        </div>
+        <div class="muted" style="font-size: 0.8125rem;">Updates the obscura binary and the Camoufox browser build on the worker, without rebuilding the image. Auto update is set on the worker (MENDARR_BACKEND_AUTO_UPDATE){% if bv and bv.auto_update and bv.interval_s %}, every {{ (bv.interval_s / 3600)|round(1) }}h{% endif %}.</div>
+      </div>
+    </div>
+    {% if bv is not none %}
+    <div class="table-wrap" style="width: 100%;">
+    <table class="data" style="width: 100%;">
+      <thead><tr><th>Backend</th><th>Component</th><th>Installed</th><th>Latest</th><th>State</th><th>Last check</th><th class="num">Actions</th></tr></thead>
+      <tbody>
+        {% for b in bv.backends %}
+        <tr>
+          <td class="cell-main">{{ b.name }}</td>
+          <td>{{ "Chromium (pinned)" if b.name == "patchright" else (b.component or "-") }}</td>
+          <td>{{ b.installed or "unknown" }}<span class="cell-sub">{{ "updated" if b.source == "updated" else "built-in" }}</span></td>
+          <td>{% if b.name == "patchright" %}<span class="muted">-</span>{% else %}{{ b.latest or "-" }}{% endif %}</td>
+          <td>{% if b.state == "failed" %}failed: {{ b.error }}{% elif b.state == "pending_restart" %}waiting for a worker restart{% elif b.state == "idle" %}{% if b.error %}{{ b.error }}{% else %}<span class="muted">-</span>{% endif %}{% else %}{{ b.state }}{% endif %}</td>
+          <td class="muted">{{ b.checked_at|ts if b.checked_at else "-" }}</td>
+          <td class="actions-cell">
+            <div class="btn-row">
+              {% if b.name == "patchright" %}
+              <span class="muted" style="font-size: 0.8125rem;">rebuild image</span>
+              {% else %}
+              <form method="post" action="/ui/settings/backends/{{ b.name }}/update">
+                {{ m.csrf_field() }}
+                <button class="btn btn-sm"{% if not (b.updatable and b.latest and b.latest != b.installed and b.state not in ("updating", "pending_restart")) %} disabled{% endif %}>{{ m.icon("circle-arrow-up") }} Update</button>
+              </form>
+              {% endif %}
+              {% if b.can_revert %}
+              <form method="post" action="/ui/settings/backends/{{ b.name }}/revert">
+                {{ m.csrf_field() }}
+                <button class="btn btn-sm"{% if b.state == "updating" %} disabled{% endif %}>Revert</button>
+              </form>
+              {% endif %}
+            </div>
+          </td>
+        </tr>
+        {% if b.state == "pending_restart" %}
+        <tr>
+          <td colspan="7">
+            <div class="row" style="justify-content: space-between;">
+              <span class="muted" style="font-size: 0.8125rem;">The worker restarts to load the new {{ b.name }} build; it waits until no session or manual solve is open.</span>
+              <form method="post" action="/ui/settings/backends/restart" onsubmit="return confirm('Restart the worker now? Open sessions and manual solves are closed.')">
+                {{ m.csrf_field() }}
+                <button class="btn btn-sm btn-danger">{{ m.icon("refresh-cw") }} Restart now (closes open sessions)</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% for b in bv.backends if b.note and b.name != "patchright" %}
+    <p class="table-note">{{ b.name }}: {{ b.note }}</p>
+    {% endfor %}
+    {% endif %}
   </section>
 
   <section id="notify" class="card">

@@ -8,7 +8,7 @@ import asyncio
 import contextlib
 import logging
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Literal
 from urllib.parse import urlparse
@@ -29,6 +29,12 @@ TERMINAL = ("solved", "expired", "cancelled", "failed")
 KEEP_FINISHED = 50
 MAX_POLL_ERRORS = 20
 HEADLESS_BACKENDS = ("obscura",)  # no X display: nothing to show in the live view
+
+
+def manual_backends(order: Sequence[str]) -> list[str]:
+    """Backends the manual picker offers: `order` minus headless ones, then any other live-view backend."""
+    live = [b for b in order if b in BACKENDS and b not in HEADLESS_BACKENDS]
+    return live + [b for b in BACKENDS if b not in HEADLESS_BACKENDS and b not in live]
 
 
 def check_manual_backend(backend: str) -> None:
@@ -85,6 +91,7 @@ class ManualManager:
         autosolve_timeout_s: float = 60.0,
         give_up_s: Callable[[], float] = lambda: 604800.0,
         timeout_s: float = 600.0,
+        locale: Callable[[], str | None] = lambda: None,
         poll_s: float = 1.5,
         clock: Callable[[], float] = time.time,
     ) -> None:
@@ -97,6 +104,7 @@ class ManualManager:
         self._autosolve_timeout_s = autosolve_timeout_s
         self._give_up_s = give_up_s
         self._timeout_s = timeout_s
+        self._locale = locale
         self._poll_s = poll_s
         self._clock = clock
         self._sessions: dict[str, ManualSession] = {}
@@ -116,11 +124,13 @@ class ManualManager:
                 return s
         try:
             started = await self._worker.manual_start(
-                ManualStart(url=inc["url"], backend=backend, timeout_s=self._timeout_s)
+                ManualStart(url=inc["url"], backend=backend, timeout_s=self._timeout_s, locale=self._locale())
             )
         except WorkerRejected as e:
             if e.status == 409:
                 raise ManualError(409, "no free browser slot, try again when a solve finishes") from e
+            if e.status == 502 and e.detail:
+                raise ManualError(502, e.detail) from e  # e.g. "Upstream proxy <url> failed: ..."
             raise ManualError(503, f"worker unavailable: {e}") from e
         except (WorkerUnavailable, TimeoutError) as e:
             raise ManualError(503, f"worker unavailable: {e}") from e
@@ -157,11 +167,13 @@ class ManualManager:
             raise ValueError(f"could not determine registrable domain: {url!r}")
         try:
             started = await self._worker.manual_start(
-                ManualStart(url=url, backend=backend, timeout_s=self._timeout_s)
+                ManualStart(url=url, backend=backend, timeout_s=self._timeout_s, locale=self._locale())
             )
         except WorkerRejected as e:
             if e.status == 409:
                 raise ManualError(409, "no free browser slot, try again when a solve finishes") from e
+            if e.status == 502 and e.detail:
+                raise ManualError(502, e.detail) from e  # e.g. "Upstream proxy <url> failed: ..."
             raise ManualError(503, f"worker unavailable: {e}") from e
         except (WorkerUnavailable, TimeoutError) as e:
             raise ManualError(503, f"worker unavailable: {e}") from e

@@ -76,6 +76,7 @@ class SolveRequest(BaseModel):
     screenshot: bool = False
     plugin: PluginSpec | None = None  # None = the worker's builtin _default
     trace: bool = False  # attach TraceData when the run fails or ends on a challenge/block page
+    locale: str | None = None  # Settings-page browser language; None = the worker's own (MENDARR_LOCALE / exit country)
     default_backend: str | None = None  # for plugins without META["backend"]; None = the worker's camoufox
     background: bool = False  # cookie refresher: answer no_slot at once instead of queueing behind real requests
 
@@ -99,6 +100,7 @@ class ManualStart(BaseModel):
     proxy: ProxySpec | None = None
     timeout_s: float = 600  # the worker closes the session on its own after this (+ a grace period)
     slot_wait_s: float = 30
+    locale: str | None = None  # Settings-page browser language; None = the worker's own
 
 
 class ManualStarted(BaseModel):
@@ -146,6 +148,7 @@ class CheckRequest(BaseModel):
     user_agent: str
     proxy: ProxySpec | None = None
     timeout_s: float = 15
+    locale: str | None = None  # Settings-page browser language; None = the worker's own
     background: bool = False  # cookie refresher: in browser check mode answer no_slot at once when no slot is free
 
 
@@ -186,3 +189,31 @@ class WorkerInfo(BaseModel):
     cookie_check: Literal["curl", "browser"] = "curl"
     impersonate: str | None = None
     proxy: str | None = None  # upstream proxy as scheme://host:port; None = direct
+
+
+class BackendStatus(BaseModel):
+    name: str  # obscura | camoufox | patchright
+    component: str  # what an update replaces: "binary" | "browser build" | "" (not updatable here)
+    installed: str = ""  # version in use; "" = unknown
+    source: Literal["built-in", "updated"] = "built-in"
+    latest: str = ""  # from the last check; "" = not checked
+    checked_at: float = 0.0
+    state: Literal["idle", "checking", "updating", "pending_restart", "failed"] = "idle"
+    error: str = ""
+    updatable: bool = False
+    can_revert: bool = False  # an updated version is active
+    note: str = ""  # e.g. "Chromium is pinned to the patchright package: rebuild the image"
+
+
+class BackendsState(BaseModel):
+    auto_update: bool = False
+    interval_s: float = 0.0
+    backends: list[BackendStatus] = []
+
+
+class BackendRestart(BaseModel):
+    force: bool = False  # True: close every open session and manual solve, restart at once
+
+
+class BackendRestartResult(BackendsState):
+    closed: int = 0  # sessions + manual solves closed by a forced restart

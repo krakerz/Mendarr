@@ -9,6 +9,7 @@ from importlib import resources
 
 from mendarr.core.traces import Trace
 from mendarr.healer.config import LlmProfile
+from mendarr.plugins.guard import BACKENDS
 
 
 class PromptError(Exception):
@@ -54,11 +55,19 @@ def extract_plugin(text: str) -> str:
     return blocks[-1].strip() + "\n"
 
 
-BACKEND_CYCLE = {"camoufox": "patchright", "patchright": "obscura", "obscura": "camoufox"}
+def _switch_candidates(current: str, order: tuple[str, ...]) -> list[str]:
+    """Backends to try after `current`: the ones after it in `order` first, then wrapping round."""
+    if current not in order:
+        return list(order)
+    i = order.index(current)
+    return [*order[i + 1 :], *order[:i]]
 
 
-def switch_backend(source: str, default: str = "camoufox") -> str | None:
-    """Source with META backend moved to the next one; a plugin without one starts from `default`."""
+def switch_backend(
+    source: str, default: str = "camoufox", order: tuple[str, ...] = BACKENDS, step: int = 1
+) -> str | None:
+    """Source with META backend moved to the `step`-th next one in `order`; a plugin without one starts from
+    `default`. None when the source has no META or there is nothing new to try."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -76,7 +85,10 @@ def switch_backend(source: str, default: str = "camoufox") -> str | None:
             except ValueError:
                 return None
             current = meta.get("backend", default)
-            new = BACKEND_CYCLE.get(current, "camoufox")
+            candidates = _switch_candidates(current, order)
+            if step < 1 or step > len(candidates):
+                return None
+            new = candidates[step - 1]
             meta["backend"] = new
             meta["notes"] = f"healer: backend switch to {new}"
             lines = source.splitlines(keepends=True)

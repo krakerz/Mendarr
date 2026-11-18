@@ -9,6 +9,8 @@ from mendarr.healer.config import (
     HealerConfig,
     parse,
     parse_duration,
+    configured_locale,
+    backend_order,
     default_backend,
     refresh_policy,
 )
@@ -109,3 +111,20 @@ def test_default_backend(monkeypatch):
     assert default_backend(Settings(default_backend="chrome"), HealerConfig()) == "camoufox"
     with pytest.raises(ValueError):
         parse("solver: {default_backend: chrome}")
+
+
+def test_solver_locale():
+    assert configured_locale(HealerConfig()) is None
+    for tag in ("en", "en-US", "zh-Hant-TW", "fil"):
+        assert configured_locale(parse(f"solver: {{locale: {tag}}}")) == tag
+    for bad in ("e", "en_US", "english-US", "en-", "en US"):
+        with pytest.raises(ValueError):
+            parse(f"solver: {{locale: {bad}}}")
+
+
+def test_backend_order():
+    assert backend_order(HealerConfig()) == ("camoufox", "patchright", "obscura")
+    assert backend_order(parse("solver: {backend_order: [obscura, camoufox]}")) == ("obscura", "camoufox")
+    for bad in ("[]", "[camoufox, camoufox]", "[chrome]"):
+        with pytest.raises(ValueError):
+            parse(f"solver: {{backend_order: {bad}}}")

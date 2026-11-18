@@ -1,6 +1,7 @@
 """Camoufox launcher: one headed browser on a slot's X display."""
 
 import asyncio
+import logging
 import os
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
@@ -8,6 +9,9 @@ from typing import Any
 
 from mendarr.config import Settings
 from mendarr.worker.backends import UpstreamUnreachable
+from mendarr.worker.locale import locale_for_ip
+
+log = logging.getLogger(__name__)
 
 _launch_lock = asyncio.Lock()  # two concurrent Camoufox launches race on the driver
 
@@ -24,19 +28,26 @@ class LaunchedBrowser:
     browser: Any  # playwright Browser
     user_agent: str
     close: Callable[[], Awaitable[None]]
+    locale: str | None = None  # browser language the launcher pinned (None = backend default)
+    base_contexts: int = 0  # contexts an idle browser has (a CDP connection keeps its default one)
 
 
-Launcher = Callable[[int], Awaitable[LaunchedBrowser]]
+Launcher = Callable[..., Awaitable[LaunchedBrowser]]  # (slot, locale=None): locale = the Settings-page tag
 
 
 async def launch(
-    display: int, *, settings: Settings, exit_ip: Callable[[], Awaitable[str]] | None = None
+    display: int,
+    *,
+    settings: Settings,
+    exit_ip: Callable[[], Awaitable[str]] | None = None,
+    locale: str | None = None,
 ) -> LaunchedBrowser:
     from camoufox.async_api import AsyncCamoufox
 
     upstream = settings.upstream
     geoip: bool | str = settings.geoip
     extra: dict[str, Any] = {}
+    ip: str | None = None
     if upstream is not None:
         # launch level: contexts without a request proxy inherit it, a request proxy still overrides it per context
         extra = {"proxy": upstream.playwright(), "firefox_user_prefs": dict(_PROXY_PREFS)}
@@ -44,8 +55,14 @@ async def launch(
             ip = await exit_ip()
             if ip == "unknown":
                 raise UpstreamUnreachable(f"Upstream proxy {upstream} failed: exit IP lookup through it failed")
-            if ip != "default":
-                geoip = ip  # Camoufox's own lookup uses requests, which resolves DNS locally for socks5
+    elif settings.geoip and exit_ip is not None:
+        ip = await exit_ip()
+    if ip not in (None, "default", "unknown"):
+        geoip = ip  # Camoufox's own lookup uses requests, which resolves DNS locally for socks5
+    locale = await locale_for_ip(settings, ip, locale)
+    log.info("camoufox on display :%s: locale %s", display, locale or "default")
+    if locale:
+        extra["locale"] = locale
     async with _launch_lock:
         cm = AsyncCamoufox(
             headless=False,
@@ -61,4 +78,4 @@ async def launch(
             ua = await page.evaluate("navigator.userAgent")
         finally:
             await page.close()
-    return LaunchedBrowser(browser, ua, lambda: cm.__aexit__(None, None, None))
+    return LaunchedBrowser(browser, ua, lambda: cm.__aexit__(None, None, None), locale)

@@ -100,7 +100,7 @@ class Executor:
                     slot_held = True
                     res = await self._run(req, slot, session, deadline, egress, plugin, backend)
                     res.plugin = plugin.ref
-                    res.user_agent = self.pool.user_agent(slot, backend)
+                    res.user_agent = self.pool.user_agent(slot, backend, req.proxy)
                     return res
         except backends.BackendUnavailable as e:
             return SolveResult(
@@ -152,8 +152,10 @@ class Executor:
     async def _run(self, req, slot, session, deadline, egress, plugin, backend) -> SolveResult:
         PlaywrightError, PlaywrightTimeout = backends.error_types(backend)
 
-        browser = await self.pool.browser(slot, backend)
-        context = session.context if session else await browser.new_context(proxy=pw_proxy(req.proxy))
+        browser = await self.pool.browser(slot, backend, req.locale, req.proxy)
+        context = session.context if session else await browser.new_context(
+            proxy=pw_proxy(req.proxy), **self.pool.context_options(slot, backend, req.locale, req.proxy)
+        )
         page = None
         tracker = None
         recorder: TraceRecorder | None = None
@@ -234,7 +236,7 @@ class Executor:
                 challenge_seen=challenge_seen,
                 clicks=ctx.clicks,
                 plugin=plugin.ref,
-                user_agent=self.pool.user_agent(slot, backend),
+                user_agent=self.pool.user_agent(slot, backend, req.proxy),
                 egress=egress,
                 snapshot=snap,
                 screenshot_b64=shot,

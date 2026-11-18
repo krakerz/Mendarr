@@ -15,7 +15,7 @@ from mendarr.core.router import Router
 from mendarr.core.traces import FailureReport, TraceStore
 from mendarr.core.tracker import SolveTracker
 from mendarr.healer import prompt
-from mendarr.healer.config import ConfigFile, DomainPolicy, HealerConfig, default_backend
+from mendarr.healer.config import ConfigFile, DomainPolicy, HealerConfig, backend_order, default_backend
 from mendarr.healer.llm import Endpoint, LlmClient, LlmUnavailable
 from mendarr.healer.notify import Event, Notice, Notifier
 from mendarr.plugins.guard import GuardError
@@ -232,7 +232,9 @@ class Healer:
                 spec, src = active.spec(), None
                 label = "retry"
             else:
-                src = prompt.switch_backend(active.source, default_backend(self._settings, cfg))
+                src = prompt.switch_backend(
+                    active.source, default_backend(self._settings, cfg), backend_order(cfg), step=i
+                )
                 if src is None:
                     continue
                 spec = PluginSpec(scope=domain, version=0, source=src, sha256=sha256(src.encode()).hexdigest())

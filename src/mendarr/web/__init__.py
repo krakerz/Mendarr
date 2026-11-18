@@ -1,5 +1,6 @@
 """Jinja2 environment for the dashboard; templates/ and static/ live next to this file."""
 
+import hashlib
 import time
 from pathlib import Path
 
@@ -101,7 +102,17 @@ def _country_name(code: str | None) -> str:
 
 
 templates.env.filters.update(ts=_ts, ago=_ago, short_ua=_short_ua, flag=_flag, country_name=_country_name)
-templates.env.globals.update(version=__version__, pct=_pct)
+def _asset_stamp() -> str:
+    """Short hash of the static files: `?v=` on asset URLs, so a browser never keeps a stale stylesheet or sprite."""
+    h = hashlib.sha256()
+    for p in sorted(STATIC_DIR.rglob("*")):
+        if p.is_file():
+            h.update(p.relative_to(STATIC_DIR).as_posix().encode())
+            h.update(p.read_bytes())
+    return h.hexdigest()[:10]
+
+
+templates.env.globals.update(version=__version__, pct=_pct, asset_v=_asset_stamp())
 
 
 def render(request: Request, name: str, status_code: int = 200, **context: object) -> HTMLResponse:

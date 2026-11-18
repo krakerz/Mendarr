@@ -389,3 +389,28 @@ dl.kv dt:last-of-type, dl.kv dd:last-of-type { border-bottom: 0; }
 @supports not selector(::-webkit-scrollbar) {
   * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--accent) 45%, transparent) transparent; }
 }
+
+/* ---------- backend order pills (settings) ---------- */
+.order-pills, .order-spare { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.order-spare { margin-top: 8px; }
+.order-spare:empty { display: none; }
+.order-pill { display: inline-flex; align-items: center; gap: 4px; padding: 4px 6px 4px 8px; border: 1px solid var(--accent); background: var(--accent-soft); border-radius: 999px; cursor: grab; user-select: none; touch-action: none; font-size: 0.875rem; }
+.order-pill.dragging { opacity: 0.35; }
+.order-pill.drop-before { box-shadow: -3px 0 0 var(--accent); }
+.order-pill.drop-after { box-shadow: 3px 0 0 var(--accent); }
+.order-grip { display: inline-flex; color: var(--muted); }
+.order-pos { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; border-radius: 50%; background: var(--accent); color: var(--accent-fg); font-size: 0.72rem; font-weight: 600; }
+.order-btn, .order-add { display: inline-flex; align-items: center; gap: 4px; background: transparent; color: inherit; border: 0; padding: 2px; border-radius: 5px; cursor: pointer; font: inherit; }
+.order-btn:hover:not([disabled]) { background: var(--surface-3); }
+.order-btn[disabled] { opacity: 0.25; cursor: default; }
+.order-add { padding: 4px 10px; border: 1px dashed var(--border-strong); border-radius: 999px; color: var(--fg-2); font-size: 0.875rem; }
+.order-add:hover { border-color: var(--accent); color: var(--fg); }
+.order-pill .icon, .order-add .icon { width: 14px; height: 14px; }
+.card-sub-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.card-sub-row + .table-wrap { margin-top: 16px; }
+.table-note { margin: 8px 0 0; font-size: 0.8125rem; color: var(--muted); }
+.cell-sub { margin-left: 8px; font-size: 0.75rem; color: var(--muted); }
+.backends-status { display: flex; align-items: center; gap: 12px; margin-bottom: 4px; }
+.backends-status form { margin: 0; }
+.btn-row { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
+.btn-row form { margin: 0; }

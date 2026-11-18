@@ -4,7 +4,7 @@ from fakeworker import FakeWorker, UA, challenge_result, clearance_cookie, plain
 from mendarr.config import Settings
 from mendarr.core.cookies import CookieCache
 from mendarr.core.router import Router, V1Params
-from mendarr.rpc import CheckResult, ProxySpec, SolveResult, WorkerError
+from mendarr.rpc import CheckResult, PluginSpec, ProxySpec, SolveResult, WorkerError
 
 URL = "http://example.com/x"
 
@@ -347,3 +347,37 @@ async def test_solve_carries_configured_default_backend(worker, cache):
 async def test_solve_without_default_backend_hook(router, worker):
     await router.request(params())
     assert worker.calls_of("solve")[0].default_backend is None
+
+
+SPEC = PluginSpec(scope="example.com", version=2, source="META = {}\n", sha256="x")
+
+
+async def test_replay_that_clears_a_challenge_is_cached(router, worker, cache):
+    worker.solve_results.append(challenge_result(URL))
+    out = await router.replay(URL, SPEC)
+    assert out.ok
+    assert cache.get("example.com", "203.0.113.7") is not None
+    assert (await router.request(params())).via == "cache_hit"
+
+
+async def test_replay_without_challenge_is_not_cached(router, worker, cache):
+    worker.solve_results.append(plain_result(URL))
+    assert (await router.replay(URL, SPEC)).ok
+    assert cache.entries() == []
+
+
+async def test_replay_respects_cache_off(worker, cache):
+    worker.solve_results.append(challenge_result(URL))
+    assert (await Router(Settings(cookie_cache=False), worker, cache).replay(URL, SPEC)).ok
+    assert cache.entries() == []
+
+
+async def test_solve_carries_configured_locale(worker, cache):
+    r = Router(Settings(), worker, cache, locale=lambda: "en-US")
+    await r.request(params())
+    assert worker.calls_of("solve")[0].locale == "en-US"
+
+
+async def test_solve_without_locale_hook(router, worker):
+    await router.request(params())
+    assert worker.calls_of("solve")[0].locale is None

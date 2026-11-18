@@ -16,6 +16,8 @@ Mendarr is a drop-in replacement for FlareSolverr designed to reliably bypass Cl
   - `camoufox`: Firefox with fingerprint injection and GeoIP matching.
   - `patchright`: Hardened Chromium driver bypassing CDP leaks.
   - `obscura`: High-performance headless stealth engine.
+- **Browser Backend Updates**: Settings → Browser backends shows the installed and latest obscura and Camoufox browser builds and updates them in place, without rebuilding the image (optional auto update). Updated builds are hash-checked before use and fall back to the image's build if anything changed.
+- **Backend Switch Order & Browser Language**: Choose, by dragging pills, the order the healer tries backends in, and set one browser language for every backend (default: the exit country's main language).
 - **Automated LLM Healing**: Failed challenge requests automatically open incidents. A local OpenAI-compatible LLM (e.g., LM Studio, vLLM, Ollama) inspects traces (screenshots, DOM, network calls) and writes a repaired solver script verified against replay gates before promotion.
 - **Per-Domain Plugin Scoping**: New or repaired solver scripts are scoped to that domain only; the active default solver is never broken or overwritten.
 - **Interactive Manual Solve Studio**: Opens the site in the chosen browser backend and streams it to the web dashboard over an authenticated noVNC live view. You solve it by hand while Mendarr records your actions as a demonstration for the healer; nothing is captured until you click **Finish & Capture**. **Attempt auto solve** runs the domain's solver plugin on the open page while you watch.
@@ -52,6 +54,9 @@ services:
       - net.ipv6.conf.all.disable_ipv6=1
       - net.ipv6.conf.default.disable_ipv6=1
       - net.ipv6.conf.lo.disable_ipv6=1
+    volumes:
+      # updated obscura / Camoufox builds (Settings -> Browser backends); see "Browser backend updates" below
+      - mendarr-backends:/data/backends
     restart: unless-stopped
 
   mendarr:
@@ -72,6 +77,7 @@ services:
 
 volumes:
   mendarr-data:
+  mendarr-backends:
 ```
 
 Start the containers:
@@ -85,6 +91,34 @@ docker compose up -d
 > **Note on open-file limits**: some Docker hosts (`LimitNOFILE=infinity` in the Docker service) give containers an open-file limit of about a billion, which makes x11vnc and other tools that walk every file descriptor crawl. The worker caps x11vnc itself; `ulimits: nofile: 65536` above covers the rest of the browser container. Check with `docker exec <browser container> sh -c 'ulimit -n'`.
 
 > **Note on Reverse Proxies**: If serving Mendarr behind Nginx, Caddy, Traefik, or NPM, enable WebSocket upgrades (`Upgrade` and `Connection` headers) on `/ui/vnc/` for the interactive Manual Solve studio.
+
+### Browser backend updates
+
+When a fix only needs a newer browser build (for example a newer user agent), update it from **Settings → Browser backends** instead of rebuilding the image:
+
+- **obscura**: downloads the latest release binary from GitHub (sha256-checked when the release publishes a digest), test-launches it, then idle browsers switch to it on their next use.
+- **Camoufox**: downloads the newest browser build that matches the installed Camoufox package, test-launches it, then restarts the worker once no solve, session or manual solve is open. **Restart now** applies it at once and closes open sessions.
+- **patchright**: its Chromium is pinned to the patchright package, so it only updates with a new worker image.
+- **Revert** goes back to the previous build, or to the one in the image.
+- Every updated build gets a hash list; a build that changed on disk is ignored (with a warning in the log and on the card) and the image's build is used.
+- Auto update is off by default: `MENDARR_BACKEND_AUTO_UPDATE=true` on the worker, interval `MENDARR_BACKEND_UPDATE_INTERVAL` (default `24h`, minimum `1h`).
+
+Updated builds live in the worker's `/data/backends` (the `mendarr-backends` volume above); the current and the previous build of each are kept. A Camoufox build is several hundred MB. Without this volume the update buttons have nowhere to write and the worker keeps the image's builds.
+
+**On an external drive** (or any host folder), bind-mount it instead of the named volume:
+
+```yaml
+  mendarr-browser:
+    volumes:
+      - /mnt/external/mendarr-backends:/data/backends
+```
+
+```sh
+sudo mkdir -p /mnt/external/mendarr-backends
+sudo chown 1000:1000 /mnt/external/mendarr-backends   # the worker runs as uid 1000
+```
+
+The drive must use a Linux filesystem (ext4, btrfs, xfs): the updater needs symlinks and executable files, which FAT32, exFAT and NTFS mounts don't provide. Don't mount it with `noexec`. Keep it mounted before the containers start (e.g. `nofail` plus a systemd mount dependency), or Docker creates an empty folder on the system disk in its place.
 
 ---
 
@@ -119,6 +153,7 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_PROXY_PASSWORD` | empty | Password for upstream proxy |
 | `MENDARR_EGRESS_COUNTRY_URL` | `https://api.country.is/{ip}` | Country lookup for the exit IP (`{ip}` is replaced; the IP is sent to that service). Empty disables it |
 | `MENDARR_GEOIP` | `true` | Match Camoufox timezone & locale to egress IP |
+| `MENDARR_LOCALE` | empty | Browser language for every backend (e.g. `en-US`); `solver.locale` in `mendarr.yml` (Settings page) wins. Empty = the exit country's main language when `MENDARR_GEOIP` is on (an Australian exit gets `en-AU`); unknown exit IP = the backend's default |
 
 ### Advanced & Integrations
 
@@ -132,6 +167,9 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_COOKIE_CHECK` | `curl` | Clearance pre-check method (`curl` impersonate or `browser`) |
 | `MENDARR_UI_SECRET` | auto | Secret key for session cookie signing (stored in `<data_dir>/ui_secret`) |
 | `MENDARR_UI_SESSION_HOURS` | `168.0` | Dashboard session duration in hours (default 7 days) |
+| `MENDARR_BACKEND_AUTO_UPDATE` | `false` | Worker: install new obscura and Camoufox browser builds automatically |
+| `MENDARR_BACKEND_UPDATE_INTERVAL` | `24h` | Worker: how often the auto update looks (minimum 1h) |
+| `MENDARR_BACKENDS_DIR` | `/data/backends` | Worker: volume holding updated builds; empty = image versions only |
 
 ### Notifications & LLM (`mendarr.yml`)
 
@@ -157,6 +195,8 @@ cookies:
 
 solver:
   default_backend: patchright   # camoufox | patchright | obscura; for plugins without their own backend; overrides MENDARR_DEFAULT_BACKEND
+  backend_order: [camoufox, patchright, obscura]   # order the healer switches a failing plugin's backend in (subset allowed); manual solve lists backends in this order
+  locale: en-US                 # browser language for every backend; overrides MENDARR_LOCALE (empty = MENDARR_LOCALE / exit country's main language)
 
 updates:
   check: true              # overrides MENDARR_UPDATE_CHECK

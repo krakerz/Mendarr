@@ -134,7 +134,7 @@ class CookieChecker:
                     return CheckResult(
                         error=WorkerError(type="internal", detail="user agent mismatch"), mode="browser"
                     )
-                browser = await self._pool.browser(slot)
+                browser = await self._pool.browser(slot, locale=req.locale)
                 context = await browser.new_context(proxy=pw_proxy(req.proxy))
                 try:
                     await context.add_cookies([c.model_dump() for c in req.cookies])

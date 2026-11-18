@@ -14,7 +14,7 @@ class FakeBrowser:
 
 
 def fake_launcher(name, calls):
-    async def launcher(slot):
+    async def launcher(slot, locale=None):
         calls.append((name, slot))
 
         async def close():
@@ -174,3 +174,88 @@ async def test_patchright_proxy_launch(monkeypatch):
     assert flag in seen[0]["args"]
     await pr.launch(1, settings=Settings(proxy_url=""))
     assert "proxy" not in seen[1] and flag not in seen[1]["args"]
+
+
+async def test_obscura_check_proxy_dead_port_is_named_without_credentials():
+    import socket
+
+    from mendarr.rpc import ProxySpec
+    from mendarr.worker.backends import UpstreamUnreachable, obscura
+
+    with socket.socket() as sock:
+        sock.bind(("127.0.0.1", 0))
+        port = sock.getsockname()[1]  # closed again on exit
+    proxy = ProxySpec(url=f"http://u:secret@127.0.0.1:{port}")
+    with pytest.raises(UpstreamUnreachable) as e:
+        await obscura._check_proxy(proxy)
+    assert str(e.value).startswith("Upstream proxy http://127.0.0.1:")
+    assert "secret" not in str(e.value)
+
+
+async def test_obscura_launch_with_request_proxy(monkeypatch):
+    import playwright.async_api
+
+    from mendarr.config import Settings
+    from mendarr.rpc import ProxySpec
+    from mendarr.worker.backends import obscura
+
+    cmds: list = []
+    checked: list = []
+
+    async def fake_exec(*cmd, **kw):
+        cmds.append(list(cmd))
+        return object()
+
+    async def noop(*a, **kw):
+        pass
+
+    async def check(proxy):
+        checked.append(proxy)
+
+    class Page:
+        async def evaluate(self, _):
+            return "UA"
+
+        async def close(self):
+            pass
+
+    class Browser:
+        contexts: list = []
+
+        async def new_page(self):
+            return Page()
+
+        async def close(self):
+            pass
+
+    class Chromium:
+        async def connect_over_cdp(self, _):
+            return Browser()
+
+    class PW:
+        chromium = Chromium()
+
+        async def stop(self):
+            pass
+
+    class Starter:
+        async def start(self):
+            return PW()
+
+    async def binary(settings):
+        return "/bin/obscura"
+
+    monkeypatch.setattr(obscura.asyncio, "create_subprocess_exec", fake_exec)
+    monkeypatch.setattr(obscura, "_wait_for_cdp", noop)
+    monkeypatch.setattr(obscura, "_check_proxy", check)
+    monkeypatch.setattr(obscura, "_find_obscura_binary", binary)
+    monkeypatch.setattr(playwright.async_api, "async_playwright", lambda: Starter())
+    proxy = ProxySpec(url="http://req:8080", username="u", password="p")
+    await obscura.launch(2, settings=Settings(proxy_url="up:3128", geoip=False), proxy=proxy)
+    cmd = cmds[0]
+    assert cmd[cmd.index("--port") + 1] == "9324"  # 9222 + display 2 + 100
+    assert cmd[cmd.index("--proxy") + 1] == "http://u:p@req:8080"
+    assert checked == [proxy]
+    await obscura.launch(2, settings=Settings(proxy_url="up:3128", geoip=False))
+    assert cmds[1][cmds[1].index("--port") + 1] == "9224"
+    assert "up:3128" in cmds[1][cmds[1].index("--proxy") + 1]
