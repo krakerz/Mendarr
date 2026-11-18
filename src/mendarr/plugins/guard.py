@@ -81,7 +81,7 @@ class GuardError(ValueError):
 
 @dataclass(frozen=True)
 class GuardReport:
-    meta: dict  # the literal META, "backend" filled in
+    meta: dict  # the literal META; "backend" only when the plugin sets one
 
 
 def _api_allows(api: frozenset[str] | None, name: str) -> bool:
@@ -134,8 +134,8 @@ def _meta(tree: ast.Module, violations: list[str]) -> dict:
     if not isinstance(meta, dict) or not all(isinstance(k, str) for k in meta):
         violations.append("META must be a dict with string keys")
         return {}
-    backend = meta.setdefault("backend", DEFAULT_BACKEND)
-    if backend not in BACKENDS:
+    backend = meta.get("backend")
+    if backend is not None and backend not in BACKENDS:
         violations.append(f"META backend {backend!r} is not one of {', '.join(BACKENDS)}")
     return meta
 

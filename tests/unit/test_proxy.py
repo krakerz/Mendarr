@@ -1,7 +1,7 @@
 import pytest
 
 from mendarr.core.classify import classify
-from mendarr.proxy import ProxyConfigError, curl_proxy_url, describe_failure, parse_upstream, redact
+from mendarr.proxy import ProxyConfigError, curl_proxy_url, describe_failure, is_upstream, parse_upstream, redact
 from mendarr.rpc import ProxySpec, WorkerError
 
 
@@ -108,3 +108,19 @@ def test_describe_failure_hides_credentials():
     out = describe_failure("proxy down", ProxySpec(url="http://u:secret@p:3128"))
     assert out.startswith("Upstream proxy http://p:3128 failed")
     assert "secret" not in out
+
+
+def test_is_upstream():
+    up = "http://192.168.1.6:8888"
+    assert is_upstream(ProxySpec(url="http://192.168.1.6:8888"), up, None)
+    assert is_upstream(ProxySpec(url="192.168.1.6:8888"), up, None)  # bare host:port defaults to http
+    assert is_upstream(ProxySpec(url="http://192.168.1.6:8888/"), up, None)
+    assert not is_upstream(ProxySpec(url="http://192.168.1.6:8889"), up, None)
+    assert not is_upstream(ProxySpec(url="socks5://192.168.1.6:8888"), up, None)
+    assert not is_upstream(ProxySpec(url="http://192.168.1.6:8888"), None, None)  # no upstream
+    # the username has to match too (a rotating proxy can give each user its own exit); the password doesn't count
+    assert is_upstream(ProxySpec(url="http://u:x@192.168.1.6:8888"), up, "u")
+    assert is_upstream(ProxySpec(url="http://192.168.1.6:8888", username="u", password="y"), up, "u")
+    assert not is_upstream(ProxySpec(url="http://192.168.1.6:8888"), up, "u")
+    assert not is_upstream(ProxySpec(url="http://v@192.168.1.6:8888"), up, "u")
+    assert not is_upstream(ProxySpec(url="not a proxy/path"), up, None)

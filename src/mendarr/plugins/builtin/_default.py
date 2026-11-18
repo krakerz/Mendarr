@@ -6,7 +6,7 @@ only; Byparr is GPL-3.0, so no code was copied.
 
 from mendarr.sdk import Ctx, Page
 
-META = {"backend": "camoufox", "notes": "builtin"}
+META = {"notes": "builtin"}
 
 # Turnstile needs a few seconds to verify a click; clicking again meanwhile restarts it
 CLICK_COOLDOWN = 4.0

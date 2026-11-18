@@ -156,9 +156,35 @@
         <div class="muted" style="font-size: 0.8125rem;">6h, 90m, 0 = off; empty uses the environment value</div>
       </div>
       <label>Idle days</label><input name="refresh_idle_days" value="{{ cookies.refresh_idle_days }}" placeholder="{{ cookies.env_idle }}">
+      <label>Solve timeout</label>
+      <div>
+        <input name="refresh_timeout" value="{{ cookies.refresh_timeout }}" placeholder="60s">
+        <div class="muted" style="font-size: 0.8125rem;">Time limit for one background re-solve (90s, 2m; minimum 10s)</div>
+      </div>
       <span></span>
       <div>
         <button class="btn btn-primary">{{ m.icon("save") }} Save cookie settings</button>
+      </div>
+    </form>
+  </section>
+
+  <section id="solver" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("settings") }} Solver</h2>
+    </div>
+    <form method="post" action="/ui/settings/solver" class="form-grid">
+      {{ m.csrf_field() }}
+      <label>Default backend</label>
+      <div>
+        <select name="default_backend">
+          <option value=""{% if not solver.default_backend %} selected{% endif %}>use environment ({{ solver.env_backend }})</option>
+          {% for b in solver.backends %}<option value="{{ b }}"{% if solver.default_backend == b %} selected{% endif %}>{{ b }}</option>{% endfor %}
+        </select>
+        <div class="muted" style="font-size: 0.8125rem;">Browser engine for automated solves whose plugin sets no backend of its own (a plugin's own backend always wins)</div>
+      </div>
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save solver settings</button>
       </div>
     </form>
   </section>

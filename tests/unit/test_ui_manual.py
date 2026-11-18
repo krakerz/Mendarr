@@ -28,9 +28,10 @@ class StubManager:
         self.finished: list[str] = []
         self.autosolved: list[str] = []
 
-    async def start(self, iid):
+    async def start(self, iid, backend="camoufox"):
         if self.error:
             raise self.error
+        self.items["m1"].backend = backend
         return self.items["m1"]
 
     async def start_adhoc(self, url, backend="camoufox"):
@@ -88,6 +89,17 @@ def test_start_redirects(ui_client, stub):
     r = post(ui_client, "/ui/incidents/7/manual")
     assert r.status_code == 303
     assert r.headers["location"] == "/ui/manual/m1"
+
+
+def test_start_default_backend(ui_client, stub):
+    post(ui_client, "/ui/incidents/7/manual")
+    assert stub.items["m1"].backend == "camoufox"
+
+
+def test_start_with_backend(ui_client, stub):
+    r = post(ui_client, "/ui/incidents/7/manual", data={"backend": "patchright"})
+    assert r.headers["location"] == "/ui/manual/m1"
+    assert stub.items["m1"].backend == "patchright"
 
 
 def test_start_htmx(ui_client, stub):

@@ -9,6 +9,7 @@ from mendarr.healer.config import (
     HealerConfig,
     parse,
     parse_duration,
+    default_backend,
     refresh_policy,
 )
 
@@ -89,3 +90,22 @@ def test_refresh_policy(monkeypatch):
     assert refresh_policy(env, parse("cookies: {refresh_interval: 0}"))[0] == 0.0
     assert refresh_policy(Settings(cookie_refresh_interval="1s"), HealerConfig())[0] == 10.0
     assert refresh_policy(Settings(cookie_refresh_interval="soon"), HealerConfig())[0] == 0.0
+
+
+def test_refresh_timeout():
+    assert HealerConfig().cookies.refresh_timeout == 60
+    assert parse("cookies: {refresh_timeout: 2m}").cookies.refresh_timeout == 120
+    with pytest.raises(ValueError):
+        parse("cookies: {refresh_timeout: 5s}")
+
+
+def test_default_backend(monkeypatch):
+    monkeypatch.delenv("MENDARR_DEFAULT_BACKEND", raising=False)
+    monkeypatch.delenv("DEFAULT_BACKEND", raising=False)
+    assert default_backend(Settings(), HealerConfig()) == "camoufox"
+    env = Settings(default_backend="obscura")
+    assert default_backend(env, HealerConfig()) == "obscura"
+    assert default_backend(env, parse("solver: {default_backend: patchright}")) == "patchright"
+    assert default_backend(Settings(default_backend="chrome"), HealerConfig()) == "camoufox"
+    with pytest.raises(ValueError):
+        parse("solver: {default_backend: chrome}")

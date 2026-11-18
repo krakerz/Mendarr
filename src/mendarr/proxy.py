@@ -91,6 +91,23 @@ def parse_upstream(url: str, type_: str = "", username: str = "", password: str 
     return UpstreamProxy(scheme, parts.hostname, port, user, pw)
 
 
+def is_upstream(proxy: ProxySpec, server: str | None, username: str | None) -> bool:
+    """True when a request proxy is the worker's default upstream (same scheme://host:port and username).
+
+    Such a request leaves from the same exit IP, so its cookies belong under that IP, not under a proxy key.
+    """
+    if not server:
+        return False
+    try:
+        parsed = parse_upstream(proxy.url)
+    except ProxyConfigError:
+        return False
+    if parsed is None:
+        return False
+    user = proxy.username or parsed.username
+    return parsed.server == server and (user or None) == (username or None)
+
+
 def redact(url: str) -> str:
     """A proxy URL without credentials, path or query."""
     if "://" not in url:

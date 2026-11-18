@@ -124,3 +124,17 @@ def test_cookie_settings(ui_client):
     assert _post(ui_client, "/ui/settings/cookies", refresh_idle_days="x").status_code == 400
     assert _post(ui_client, "/ui/settings/cookies", refresh_idle_days="-1").status_code == 400
     assert _post(ui_client, "/ui/settings/cookies", refresh_interval="soon").status_code == 400
+    _post(ui_client, "/ui/settings/cookies", refresh_timeout="90s")
+    assert _read(ui_client)["cookies"] == {"refresh_timeout": "90s"}
+    assert 'name="refresh_timeout" value="90s"' in ui_client.get("/ui/settings").text
+    assert _post(ui_client, "/ui/settings/cookies", refresh_timeout="5s").status_code == 400
+
+
+def test_solver_settings(ui_client):
+    assert 'action="/ui/settings/solver"' in ui_client.get("/ui/settings").text
+    assert _post(ui_client, "/ui/settings/solver", default_backend="patchright").status_code == 303
+    assert _read(ui_client)["solver"] == {"default_backend": "patchright"}
+    assert '<option value="patchright" selected>' in ui_client.get("/ui/settings").text
+    _post(ui_client, "/ui/settings/solver", default_backend="")
+    assert _read(ui_client)["solver"] == {}
+    assert _post(ui_client, "/ui/settings/solver", default_backend="chrome").status_code == 400

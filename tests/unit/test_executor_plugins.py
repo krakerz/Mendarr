@@ -5,7 +5,7 @@ import importlib.resources
 import pytest
 
 from mendarr.config import Settings
-from mendarr.rpc import PluginSpec, SolveRequest
+from mendarr.rpc import PluginSpec, SolveRequest, SolveResult
 from mendarr.worker.egress import Egress
 from mendarr.worker.executor import Executor
 from mendarr.worker.sessions import SessionManager
@@ -23,6 +23,10 @@ def spec(source: str, sha: str | None = None) -> PluginSpec:
 
 def builtin_source() -> str:
     return (importlib.resources.files("mendarr.plugins.builtin") / "_default.py").read_text()
+
+
+def with_backend(backend: str) -> str:
+    return builtin_source().replace("META = {", f'META = {{"backend": "{backend}", ', 1)
 
 
 def make_executor():
@@ -59,7 +63,7 @@ async def test_sha_mismatch():
 
 async def test_unavailable_backend():
     ex, launched = make_executor()
-    src = builtin_source().replace('"camoufox"', '"patchright"', 1)
+    src = with_backend("patchright")
     res = await ex.solve(request(spec(src)))
     assert res.error.type == "internal"
     assert "patchright" in res.error.detail
@@ -115,3 +119,24 @@ async def test_background_solve_with_spare_slots_runs():
     except LaunchAttempted:
         return
     assert res.error is None or res.error.type != "no_slot", res.error
+
+
+async def test_backend_resolution():
+    ex, _ = make_executor()
+    seen: list[str] = []
+
+    async def fake_run(req, slot, session, deadline, egress, plugin, backend):
+        seen.append(backend)
+        return SolveResult()
+
+    ex._run = fake_run
+    for plugin_src, default, want in [
+        (with_backend("obscura"), "patchright", "obscura"),  # explicit META wins
+        (builtin_source(), "patchright", "patchright"),  # absent -> the request's default
+        (builtin_source(), None, "camoufox"),  # absent + None -> camoufox
+        (builtin_source(), "chrome", "camoufox"),  # unknown -> camoufox
+    ]:
+        seen.clear()
+        req = SolveRequest(url="https://example.com/", timeout_s=10, plugin=spec(plugin_src), default_backend=default)
+        await ex.solve(req)
+        assert seen == [want]

@@ -20,6 +20,8 @@ from mendarr.config import Settings
 from mendarr.plugins import guard
 from mendarr.rpc import PluginSpec
 
+BACKEND_FOLLOWS_DEFAULT = "default"  # `backend` column of a plugin that sets no META backend
+
 log = logging.getLogger(__name__)
 
 DEFAULT_SCOPE = "_default"
@@ -195,7 +197,7 @@ class PluginStore:
         source = resources.files("mendarr.plugins.builtin").joinpath("_default.py").read_text(encoding="utf-8")
         meta = guard.check(source).meta
         sha = _sha(source)
-        backend = str(meta["backend"])
+        backend = str(meta.get("backend", BACKEND_FOLLOWS_DEFAULT))
         notes = str(meta.get("notes", ""))
         with self._lock:
             row = self._row(DEFAULT_SCOPE, 1)
@@ -270,7 +272,7 @@ class PluginStore:
                     _sha(source),
                     parent_v,
                     author,
-                    str(report.meta["backend"]),
+                    str(report.meta.get("backend", BACKEND_FOLLOWS_DEFAULT)),
                     notes if notes is not None else str(report.meta.get("notes", "")),
                     self._clock(),
                 ),

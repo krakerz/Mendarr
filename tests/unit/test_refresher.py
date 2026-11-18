@@ -17,10 +17,12 @@ NOW = 1_000_000.0
 class FakeRouter:
     def __init__(self):
         self.calls = []
+        self.timeouts = []
         self.results = {}
 
-    async def refresh(self, entry, *, renew_before):
+    async def refresh(self, entry, *, renew_before, timeout_s=60.0):
         self.calls.append((entry.domain, renew_before))
+        self.timeouts.append(timeout_s)
         r = self.results.get(entry.domain, "ok")
         if isinstance(r, Exception):
             raise r
@@ -156,3 +158,11 @@ async def test_loop_first_round_after_delay(tmp_path, cache):
     assert len(router.calls) == 1
     assert all(n == 0 for t, n in seen if t < 60)  # nothing before the 60 s first delay
     assert r.next_at is not None and r.next_at > now[0]
+
+
+async def test_solve_timeout_from_config(tmp_path, cache):
+    put(cache, "a.com")
+    (tmp_path / "mendarr.yml").write_text("cookies: {refresh_timeout: 90s}\n")
+    r, router, _, _ = make(tmp_path, cache)
+    await r.run_round(3600, 7)
+    assert router.timeouts == [90.0]

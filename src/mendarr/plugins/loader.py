@@ -37,8 +37,10 @@ class LoadedPlugin:
         return f"{self.scope}@{self.version}"
 
     @property
-    def backend(self) -> str:
-        return str(self.meta.get("backend", guard.DEFAULT_BACKEND))
+    def backend(self) -> str | None:
+        """The plugin's explicit META backend; None = follow the configured default."""
+        backend = self.meta.get("backend")
+        return None if backend is None else str(backend)
 
 
 def _check_solve(scope: str, solve: object) -> None:

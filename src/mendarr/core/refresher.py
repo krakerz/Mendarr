@@ -125,7 +125,11 @@ class Refresher:
             await self._sleep(self._jitter(*self.JITTER_S))
             try:
                 # renew what would expire before the next round; POLL_S covers a late wake-up and a slow round
-                result = await self._router.refresh(entry, renew_before=self._clock() + interval_s + self.POLL_S)
+                result = await self._router.refresh(
+                    entry,
+                    renew_before=self._clock() + interval_s + self.POLL_S,
+                    timeout_s=self._config.get().cookies.refresh_timeout,
+                )
             except asyncio.CancelledError:
                 raise
             except Exception:

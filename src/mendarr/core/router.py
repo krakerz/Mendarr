@@ -20,7 +20,7 @@ from mendarr.core.stats import CHECK_MISMATCH, DomainStats
 from mendarr.core.traces import FailureReport
 from mendarr.core.tracker import SolveTracker
 from mendarr.plugins.store import PluginStore, RollbackEvent
-from mendarr.proxy import redact
+from mendarr.proxy import is_upstream, redact
 from mendarr.rpc import CheckRequest, Cookie, PluginSpec, ProxySpec, Snapshot, SolveRequest, SolveResult
 
 log = logging.getLogger(__name__)
@@ -102,6 +102,7 @@ class Router:
         hooks: RouterHooks | None = None,
         tracker: SolveTracker | None = None,
         stats: DomainStats | None = None,
+        default_backend: Callable[[], str] | None = None,
     ) -> None:
         self._settings = settings
         self._worker = worker
@@ -112,6 +113,7 @@ class Router:
         self.manual: ManualHold | None = None  # set by create_app
         self.tracker = tracker
         self._stats = stats
+        self._default_backend = default_backend
 
     async def request(self, p: V1Params) -> Outcome:
         t0 = self._clock()
@@ -163,9 +165,13 @@ class Router:
         """(hit, check was challenged)."""
         domain = registrable_domain(p.url)
         try:
-            egress = f"proxy:{redact(p.proxy.url)}" if p.proxy else (await self._worker.egress()).ip
+            info = await self._worker.egress()
         except (WorkerUnavailable, TimeoutError):
             return None, False
+        if p.proxy is None or is_upstream(p.proxy, info.proxy, info.proxy_user):
+            egress = info.ip  # no proxy, or the worker's own upstream: same exit IP
+        else:
+            egress = f"proxy:{redact(p.proxy.url)}"
         self._cache.touch(domain, p.url)
         entry = self._cache.get(domain, egress)
         if entry is None or remaining() < 3:
@@ -266,6 +272,7 @@ class Router:
                         wait_s=0 if p.return_only_cookies else p.wait_s,
                         screenshot=p.return_screenshot,
                         plugin=spec,
+                        default_backend=self._default_backend() if self._default_backend else None,
                         trace=True,
                         background=background,
                     )
@@ -342,10 +349,10 @@ class Router:
                 egress=res.egress,
             )
 
-    async def refresh(self, entry: CacheEntry, *, renew_before: float) -> str:
+    async def refresh(self, entry: CacheEntry, *, renew_before: float, timeout_s: float = 60.0) -> str:
         """Background re-check of one cached entry (cookie refresher). Returns the status word shown on the page."""
         p = V1Params(
-            url=entry.url, method="GET", post_data=None, max_timeout_ms=60000, cookies=[], proxy=None,
+            url=entry.url, method="GET", post_data=None, max_timeout_ms=int(timeout_s * 1000), cookies=[], proxy=None,
             session=None, session_ttl_minutes=None, return_only_cookies=False, return_screenshot=False,
             disable_media=False, wait_s=0,
         )

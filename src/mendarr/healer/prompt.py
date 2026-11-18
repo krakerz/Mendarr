@@ -57,7 +57,8 @@ def extract_plugin(text: str) -> str:
 BACKEND_CYCLE = {"camoufox": "patchright", "patchright": "obscura", "obscura": "camoufox"}
 
 
-def switch_backend(source: str) -> str | None:
+def switch_backend(source: str, default: str = "camoufox") -> str | None:
+    """Source with META backend moved to the next one; a plugin without one starts from `default`."""
     try:
         tree = ast.parse(source)
     except SyntaxError:
@@ -74,7 +75,7 @@ def switch_backend(source: str) -> str | None:
                 meta = ast.literal_eval(node.value)
             except ValueError:
                 return None
-            current = meta.get("backend", "camoufox")
+            current = meta.get("backend", default)
             new = BACKEND_CYCLE.get(current, "camoufox")
             meta["backend"] = new
             meta["notes"] = f"healer: backend switch to {new}"

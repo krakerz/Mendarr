@@ -14,6 +14,7 @@ from fastapi.responses import RedirectResponse, Response
 
 from mendarr.api.auth import require_user
 from mendarr.healer.config import MIN_UPDATE_S, HealerConfig, parse, parse_duration, update_policy
+from mendarr.plugins.guard import BACKENDS
 from mendarr.healer.llm import LlmClient
 from mendarr.healer.notify import TITLES, Notice, Notifier
 from mendarr.web import error_page, render, templates
@@ -148,6 +149,7 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
     heal_raw = raw.get("healer") if isinstance(raw.get("healer"), dict) else {}
     notify_raw = raw.get("notify") if isinstance(raw.get("notify"), dict) else {}
     cookies_raw = raw.get("cookies") if isinstance(raw.get("cookies"), dict) else {}
+    solver_raw = raw.get("solver") if isinstance(raw.get("solver"), dict) else {}
     updates_raw = raw.get("updates") if isinstance(raw.get("updates"), dict) else {}
     upd_enabled, upd_interval, _ = update_policy(st, cfg)
     windows = esc_raw.get("heal_windows")
@@ -184,8 +186,14 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
         "cookies": {
             "refresh_interval": cookies_raw.get("refresh_interval", ""),
             "refresh_idle_days": cookies_raw.get("refresh_idle_days", ""),
+            "refresh_timeout": cookies_raw.get("refresh_timeout", ""),
             "env_interval": st.cookie_refresh_interval,
             "env_idle": st.cookie_refresh_idle_days,
+        },
+        "solver": {
+            "default_backend": solver_raw.get("default_backend", ""),
+            "backends": BACKENDS,
+            "env_backend": st.default_backend,
         },
         "updates": {
             "enabled": upd_enabled,
@@ -334,6 +342,7 @@ async def cookies(request: Request) -> Response:
     def mutate(raw: dict, form) -> None:
         sec = _section(raw, "cookies")
         _opt(sec, "refresh_interval", str(form.get("refresh_interval", "")))
+        _opt(sec, "refresh_timeout", str(form.get("refresh_timeout", "")))
         days = str(form.get("refresh_idle_days", "")).strip()
         if not days:
             sec.pop("refresh_idle_days", None)
@@ -347,6 +356,21 @@ async def cookies(request: Request) -> Response:
         sec["refresh_idle_days"] = value
 
     return await _edit(request, mutate, "Saved the cookie settings", "cookies")
+
+
+@router.post("/settings/solver")
+async def solver_save(request: Request) -> Response:
+    def mutate(raw: dict, form) -> None:
+        sec = _section(raw, "solver")
+        value = str(form.get("default_backend", "")).strip()
+        if not value:
+            sec.pop("default_backend", None)
+        elif value not in BACKENDS:
+            raise _Bad(f"Default backend must be one of: {', '.join(BACKENDS)}")
+        else:
+            sec["default_backend"] = value
+
+    return await _edit(request, mutate, "Saved the solver settings", "solver")
 
 
 @router.post("/settings/updates")
