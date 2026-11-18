@@ -193,6 +193,7 @@ async def test_obscura_check_proxy_dead_port_is_named_without_credentials():
 
 
 async def test_obscura_launch_with_request_proxy(monkeypatch):
+    pytest.importorskip("playwright")
     import playwright.async_api
 
     from mendarr.config import Settings
