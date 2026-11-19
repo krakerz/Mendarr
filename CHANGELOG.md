@@ -5,6 +5,26 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-11-19
+
+### Added
+- Camoufox mirror fallback: when the official Camoufox downloads fail (its GitHub repos are currently unavailable), the browser image and the Settings updater fetch Camoufox from a mirror (jo-inc/camofox-browser backups), checked against its sha256. Set the mirror with `MENDARR_CAMOUFOX_MIRROR_URL` on the worker, or the `CAMOUFOX_MIRROR_URL` build arg for the image; an empty value turns it off. The Backends table shows "via mirror".
+- LLM endpoints: a status chip next to "Test connection" (e.g. "ok 200", "failed timeout"), a model dropdown filled after a successful test or save, LM Studio's loaded models marked "(loaded)", and a rank number per endpoint.
+- Optional "Extra request JSON" per LLM endpoint, merged into chat requests (e.g. `chat_template_kwargs` for Qwen3 or NIM). `model`, `messages` and `stream` are reserved and can't be overridden.
+- Incident page refreshes itself and shows a "Now" row with what the healer is doing, a Backend row, and the backend each heal attempt used (older incidents show it as "inferred from plugin"). Trace pages show the backend too.
+
+### Changed
+- The healer re-reads the config and picks the LLM before every attempt, so changes to the endpoint order, endpoint or key apply to the next attempt.
+- The heal prompt includes the code and failure reason of the last 3 attempts.
+- Settings page layout: one label column, equal field widths, and equal-height controls and buttons.
+- Browser image builds download Camoufox and Chromium before copying the source, so code changes no longer re-download the browsers.
+- New app icon (a bandaged ring) for the favicon, sidebar and login page, plus an Apple touch icon. The favicon is now the full coloured tile, so it stays visible on dark browser tabs.
+
+### Fixed
+- The healer's progress text showed the LLM profile, including its API key. It now shows "via <endpoint name>".
+- Browser image builds no longer succeed silently without a Camoufox browser. `camoufox fetch` exits 0 on failure, so the build now checks the installed version and fails if there is none.
+- The Settings updater now detects whether a Camoufox build was actually installed.
+
 ## [1.1.0] — 2026-11-18
 
 ### Added

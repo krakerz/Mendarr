@@ -18,6 +18,7 @@
       <dt>Final URL</dt><dd>{% if meta.final_url %}<code>{{ meta.final_url }}</code>{% else %}<span class="muted">—</span>{% endif %}</dd>
       <dt>Status code</dt><dd><span class="tnum">{{ meta.status }}</span></dd>
       <dt>Page title</dt><dd>{{ meta.title or "—" }}</dd>
+      <dt>Backend</dt><dd>{% if meta.backend %}<span class="badge mono">{{ meta.backend }}</span>{% else %}<span class="muted">unknown</span>{% endif %}</dd>
       <dt>Active plugin</dt><dd><code>{{ meta.plugin }}</code></dd>
       <dt>Challenge seen</dt><dd>{{ meta.challenge_seen }}</dd>
       <dt>Click count</dt><dd><span class="tnum">{{ meta.clicks }}</span></dd>

@@ -100,6 +100,7 @@ class Executor:
                     slot_held = True
                     res = await self._run(req, slot, session, deadline, egress, plugin, backend)
                     res.plugin = plugin.ref
+                    res.backend = backend
                     res.user_agent = self.pool.user_agent(slot, backend, req.proxy)
                     return res
         except backends.BackendUnavailable as e:

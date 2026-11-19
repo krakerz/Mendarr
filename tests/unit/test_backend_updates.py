@@ -158,7 +158,7 @@ async def test_camoufox_update_pending_restart(tmp_path):
     async def run(cmd, *, env, timeout):
         calls.append((cmd[0], env["XDG_CACHE_HOME"]))
         if cmd[0] == "camoufox":
-            (Path(env["XDG_CACHE_HOME"]) / "camoufox" / "browsers").mkdir(parents=True)
+            (Path(env["XDG_CACHE_HOME"]) / "camoufox" / "browsers" / "official" / "150.0-beta.1").mkdir(parents=True)
             (Path(env["XDG_CACHE_HOME"]) / "camoufox" / "config.json").write_text("{}")
             return 0, "done"
         return 0, "Mozilla/5.0 Firefox/150.0"
@@ -176,7 +176,10 @@ async def test_camoufox_update_pending_restart(tmp_path):
 
 async def test_camoufox_smoke_failure(tmp_path):
     async def run(cmd, *, env, timeout):
-        return (0, "ok") if cmd[0] == "camoufox" else (1, "boom")
+        if cmd[0] == "camoufox":
+            (Path(env["XDG_CACHE_HOME"]) / "camoufox" / "browsers" / "official" / "150.0-beta.1").mkdir(parents=True)
+            return 0, "ok"
+        return 1, "boom"
 
     up, _, restarts = make(tmp_path, run=run)
     st = await up.update("camoufox")
@@ -200,3 +203,27 @@ def test_state_reports_auto_update_and_patchright(tmp_path):
     pr = next(b for b in st.backends if b.name == "patchright")
     assert not pr.updatable and "rebuilding" in pr.note
     json.dumps(st.model_dump())
+
+
+async def test_camoufox_404_is_readable(tmp_path, monkeypatch):
+    import sys
+    import types
+
+    class CamoufoxUpdate:
+        def __init__(self):
+            raise RuntimeError("404 Client Error: Not Found for url: https://api.github.com/repos/x")
+
+    fake = types.ModuleType("camoufox.__main__")
+    fake.CamoufoxUpdate = CamoufoxUpdate
+    monkeypatch.setitem(sys.modules, "camoufox", types.ModuleType("camoufox"))
+    monkeypatch.setitem(sys.modules, "camoufox.__main__", fake)
+    up, _, _ = make(tmp_path)
+
+    async def no_installed():
+        pass
+
+    up.refresh_installed = no_installed
+    state = await up.check()
+    cf = next(b for b in state.backends if b.name == "camoufox")
+    assert cf.state == "failed" and "GitHub releases are unavailable" in cf.error
+

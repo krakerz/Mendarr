@@ -279,13 +279,20 @@ class Healer:
 
     async def _heal_window(self, inc: dict, pol: DomainPolicy, cfg: HealerConfig) -> None:
         iid, domain = inc["id"], inc["domain"]
-        ep = await self._llm.pick(pol.llm_order, cfg.llm.profiles)
-        if ep is None:
-            self._store.update_incident(iid, state="open", next_attempt_at=self._clock() + cfg.healer.llm_wait_s)
-            log.info("incident #%d: no LLM endpoint reachable, looking again in %.0fs", iid, cfg.healer.llm_wait_s)
-            return
         day = time.strftime("%Y-%m-%d", time.localtime(self._clock()))
-        for rnd in range(pol.escalation.heal_rounds):
+        rnd = 0
+        while rnd < pol.escalation.heal_rounds:
+            # Settings can change mid-window: re-read the config and pick the endpoint before every round.
+            cfg = self._config.get()
+            pol = cfg.for_domain(domain)
+            if not pol.enabled:
+                self._store.update_incident(iid, state="gave_up", next_attempt_at=None, note="healing is off for this domain")
+                return
+            ep = await self._llm.pick(pol.llm_order, cfg.llm.profiles)
+            if ep is None:
+                self._store.update_incident(iid, state="open", next_attempt_at=self._clock() + cfg.healer.llm_wait_s)
+                log.info("incident #%d: no LLM endpoint reachable, looking again in %.0fs", iid, cfg.healer.llm_wait_s)
+                return
             if self._store.day_rounds(domain, day) >= pol.daily_rounds:
                 self._store.update_incident(
                     iid, state="open", next_attempt_at=_next_midnight(self._clock()), note="daily LLM round cap reached"
@@ -301,6 +308,9 @@ class Healer:
             self._store.add_day_round(domain, day)
             if verdict == "passed":
                 return
+            rnd += 1
+            cfg = self._config.get()
+            pol = cfg.for_domain(domain)
         cur = self._store.incident(iid)
         if cur is None or cur["state"] not in ("open", "healing"):
             return
@@ -330,10 +340,10 @@ class Healer:
         demo = self._traces.latest(domain, "demo")
         all_attempts = self._store.attempts(iid)
         history = [a for a in all_attempts if a["tier"] == 1]
-        newest = next((a for a in reversed(history) if a["version"] is not None), None)
-        if newest is not None:
+        with_version = [a for a in history if a["version"] is not None]
+        for cand in with_version[-prompt.CODE_CANDIDATES :]:
             try:
-                newest["source"] = self._store.get(newest["scope"], newest["version"]).source
+                cand["source"] = self._store.get(cand["scope"], cand["version"]).source
             except StoreError:
                 pass
         messages = prompt.build_messages(
@@ -352,7 +362,7 @@ class Healer:
         n = len(all_attempts) + 1
         common = {"tier": 1, "heal_window": inc["heal_window"], "round": rnd, "profile": ep.name, "model": ep.model}
         if self._tracker is not None and iid in self._active_tokens:
-            self._tracker.update(self._active_tokens[iid], f"incident #{iid}: round {rnd} via {ep.profile}")
+            self._tracker.update(self._active_tokens[iid], f"incident #{iid}: round {rnd} via {ep.name}")
         try:
             reply = await self._llm.complete(ep, messages)
         except LlmUnavailable as e:

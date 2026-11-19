@@ -132,26 +132,46 @@ def _failure_section(domain: str, url: str, kind: str, detail: str, trace: Trace
     return "## Failure\n" + "\n".join(lines)
 
 
+# Prompt budget (default sizes stay under ~30k tokens): code for the last 3 candidates, 1500-char failure
+# reasons for those, 400 for older rows, and older (non-newest) sources cut at 8000 chars.
+CODE_CANDIDATES = 3
+CANDIDATE_DETAIL_CHARS = 1500
+OTHER_DETAIL_CHARS = 400
+OLDER_SOURCE_CHARS = 8000
+
+
 def _history_section(history: list[dict], profile: LlmProfile, load_trace) -> str:
     rows = history[-6:]
+    cands = [r for r in rows if r.get("version") is not None and r.get("source")][-CODE_CANDIDATES:]
+    shown = {id(r) for r in cands}
+
+    def detail(r: dict) -> str:
+        return str(r["detail"])[: CANDIDATE_DETAIL_CHARS if id(r) in shown else OTHER_DETAIL_CHARS]
+
     lines = [
-        f"- window {r['heal_window'] + 1} round {r['round'] + 1}: {r['result']} — {str(r['detail'])[:400]}"
-        for r in rows
+        f"- window {r['heal_window'] + 1} round {r['round'] + 1}: {r['result']} — {detail(r)}" for r in rows
     ]
     out = "## Previous attempts\n" + "\n".join(lines)
-    newest = next((r for r in reversed(rows) if r.get("version") is not None), None)
-    if newest is not None and newest.get("source"):
-        out += f"\n\n### Last candidate ({newest['scope']}@v{newest['version']})\n" + _fenced(
-            newest["source"], "python"
-        )
-        t = load_trace(newest["trace_id"]) if newest.get("trace_id") and load_trace else None
-        if t is not None:
-            replay = ""
-            steps = t.meta.get("steps") or []
-            if steps:
-                replay += "Steps:\n" + "\n".join(f"- {s}" for s in steps[-30:]) + "\n"
-            replay += "DOM:\n" + _fenced(t.dom[: profile.dom_chars // 3])
-            out += "\n\n### Its replay\n" + replay
+    for i, r in enumerate(reversed(cands)):
+        ref = f"{r['scope']}@v{r['version']}"
+        if i == 0:
+            out += f"\n\n### Last candidate ({ref})\n" + _fenced(r["source"], "python")
+            t = load_trace(r["trace_id"]) if r.get("trace_id") and load_trace else None
+            if t is not None:
+                replay = ""
+                steps = t.meta.get("steps") or []
+                if steps:
+                    replay += "Steps:\n" + "\n".join(f"- {s}" for s in steps[-30:]) + "\n"
+                replay += "DOM:\n" + _fenced(t.dom[: profile.dom_chars // 3])
+                out += "\n\n### Its replay\n" + replay
+        else:
+            src = r["source"]
+            if len(src) > OLDER_SOURCE_CHARS:
+                src = src[:OLDER_SOURCE_CHARS] + "\n# … (truncated)"
+            out += (
+                f"\n\n### Earlier candidate ({ref}): {r['result']}\n"
+                f"{str(r['detail'])[:CANDIDATE_DETAIL_CHARS]}\n" + _fenced(src, "python")
+            )
     return out
 
 

@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     backend_update_interval: str = "24h"  # minimum 1h
     # for testing only: obscura's "latest release" JSON (GitHub shape)
     obscura_releases_url: str = "https://api.github.com/repos/h4ckf0r0day/obscura/releases/latest"
+    # fallback Camoufox build source (GitHub releases API of a mirror repo) when the official releases fail; "" = off
+    camoufox_mirror_url: str = "https://api.github.com/repos/jo-inc/camofox-browser/releases"
     # FlareSolverr always returns {} here; real headers (Content-Encoding etc.) can confuse clients
     return_headers: bool = False
 

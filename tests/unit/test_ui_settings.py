@@ -87,14 +87,91 @@ def test_raw_yaml(ui_client):
     assert bad.status_code == 400 and "healer: [" in bad.text
 
 
+def _models(*items):
+    return httpx.Response(200, json={"data": [{"id": i} for i in items]})
+
+
 def test_check(ui_client):
     _post(ui_client, "/ui/settings/llm", name="pc", base_url="http://pc/v1")
     st = ui_client.app.state
-    st.llm_transport = httpx.MockTransport(lambda r: httpx.Response(200, json={"data": [{"id": "gemma-4"}]}))
-    assert "gemma-4" in _post(ui_client, "/ui/settings/llm/pc/check").text
+    st.llm_transport = httpx.MockTransport(lambda r: _models("gemma-4"))
+    res = _post(ui_client, "/ui/settings/llm/pc/check").text
+    assert ">200<" in res and "model gemma-4, 1 models listed" in res
     st.llm_transport = httpx.MockTransport(lambda r: httpx.Response(500))
-    assert "unreachable" in _post(ui_client, "/ui/settings/llm/pc/check").text
-    assert "unknown profile" in _post(ui_client, "/ui/settings/llm/zz/check").text
+    res = _post(ui_client, "/ui/settings/llm/pc/check").text
+    assert ">500<" in res and 'title="HTTP 500"' in res
+    st.llm_transport = httpx.MockTransport(lambda r: httpx.Response(401))
+    res = _post(ui_client, "/ui/settings/llm/pc/check").text
+    assert ">401<" in res and "check the API key" in res
+
+    def timeout(r):
+        raise httpx.ConnectTimeout("slow")
+
+    st.llm_transport = httpx.MockTransport(timeout)
+    assert ">timeout<" in _post(ui_client, "/ui/settings/llm/pc/check").text
+    st.llm_transport = httpx.MockTransport(lambda r: _models())
+    res = _post(ui_client, "/ui/settings/llm/pc/check").text
+    assert ">no model<" in res and "no model loaded" in res
+    st.llm_transport = httpx.MockTransport(lambda r: httpx.Response(200, text="<html>"))
+    assert ">bad reply<" in _post(ui_client, "/ui/settings/llm/pc/check").text
+    assert ">unsaved<" in _post(ui_client, "/ui/settings/llm/zz/check").text
+
+
+def test_check_model_select(ui_client):
+    _post(ui_client, "/ui/settings/llm", name="pc", base_url="http://pc/v1")
+    st = ui_client.app.state
+    st.llm_transport = httpx.MockTransport(lambda r: _models("b-model", "a-model"))
+    res = _post(ui_client, "/ui/settings/llm/pc/check").text
+    assert 'hx-swap-oob="true"' in res and 'id="model-pc"' in res
+    assert "<select" in res and ">a-model<" in res and ">b-model<" in res
+    page = ui_client.get("/ui/settings").text
+    assert '<select name="model">' in page, "sel"
+    assert 'id="check-pc"' in page, "chk"
+    assert ">200<" in page, "200"
+    _post(ui_client, "/ui/settings/llm/pc", base_url="http://pc/v1", model="b-model")
+    assert 'value="b-model" selected' in ui_client.get("/ui/settings").text
+    _post(ui_client, "/ui/settings/llm/pc", base_url="http://pc/v1", model="gone")
+    assert "gone (not found)" in ui_client.get("/ui/settings").text
+    _post(ui_client, "/ui/settings/llm/pc", base_url="http://pc/v1", model="a-mod")
+    assert "a-mod (matches a-model)" in ui_client.get("/ui/settings").text
+
+
+def test_lmstudio_states(ui_client):
+    _post(ui_client, "/ui/settings/llm", name="pc", base_url="http://pc:1234/v1")
+
+    def handler(r):
+        if r.url.path == "/api/v0/models":
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {"id": "gemma-4", "type": "llm", "state": "loaded"},
+                        {"id": "qwen", "type": "llm", "state": "not-loaded"},
+                        {"id": "embed", "type": "embeddings", "state": "loaded"},
+                    ]
+                },
+            )
+        return _models("qwen", "gemma-4", "embed")
+
+    ui_client.app.state.llm_transport = httpx.MockTransport(handler)
+    res = _post(ui_client, "/ui/settings/llm/pc/check").text
+    assert "gemma-4 (loaded)" in res and "embed" not in res
+    assert res.index("gemma-4 (loaded)") < res.index(">qwen<")  # loaded first
+
+
+def test_save_probes_and_delete_clears(ui_client):
+    _post(ui_client, "/ui/settings/llm", name="pc", base_url="http://pc/v1")
+    st = ui_client.app.state
+    st.llm_transport = httpx.MockTransport(lambda r: _models("m1"))
+    assert _post(ui_client, "/ui/settings/llm/pc", base_url="http://pc/v1").status_code == 303
+    assert st.llm_models["pc"]["ids"] == ["m1"]
+    st.llm_transport = httpx.MockTransport(lambda r: httpx.Response(500))
+    assert _post(ui_client, "/ui/settings/llm/pc", base_url="http://pc/v1", model="x").status_code == 303
+    assert st.llm_models["pc"]["ids"] == ["m1"] and st.llm_models["pc"]["status"]["code"] == "500"
+    _post(ui_client, "/ui/settings/llm/pc", base_url="http://other/v1")  # base_url change drops the old list
+    assert st.llm_models["pc"]["ids"] == []
+    _post(ui_client, "/ui/settings/llm/pc/delete")
+    assert "pc" not in st.llm_models
 
 
 def test_notify_test(ui_client):
@@ -311,3 +388,18 @@ def test_backends_restart_posts_force(ui_client, fake_worker):
 
 def test_backends_routes_need_csrf(ui_client):
     assert ui_client.post("/ui/settings/backends/check", data={}, follow_redirects=False).status_code in (400, 403)
+
+
+def test_extra_body_json(ui_client):
+    _post(ui_client, "/ui/settings/raw", text="llm:\n  profiles:\n    pc:\n      base_url: http://pc/v1\n")
+    form = {"base_url": "http://pc/v1"}
+    body = '{"chat_template_kwargs": {"enable_thinking": false}}'
+    assert _post(ui_client, "/ui/settings/llm/pc", extra_body=body, **form).status_code == 303
+    assert _read(ui_client)["llm"]["profiles"]["pc"]["extra_body"] == {"chat_template_kwargs": {"enable_thinking": False}}
+    assert "chat_template_kwargs" in ui_client.get("/ui/settings").text
+    before = _path(ui_client).read_text()
+    for bad in ("[1]", "{bad", '{"model": "x"}'):
+        assert _post(ui_client, "/ui/settings/llm/pc", extra_body=bad, **form).status_code == 400
+        assert _path(ui_client).read_text() == before
+    assert _post(ui_client, "/ui/settings/llm/pc", extra_body="  ", **form).status_code == 303
+    assert "extra_body" not in _read(ui_client)["llm"]["profiles"]["pc"]

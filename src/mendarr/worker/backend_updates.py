@@ -18,7 +18,7 @@ from pathlib import Path
 import httpx
 
 from mendarr.config import Settings
-from mendarr.worker import integrity
+from mendarr.worker import camoufox_mirror, integrity
 from mendarr.healer.config import MIN_UPDATE_S, parse_duration
 from mendarr.rpc import BackendsState, BackendStatus
 from mendarr.worker.slots import SlotPool
@@ -130,7 +130,7 @@ class BackendUpdater:
         self._base = Path(settings.backends_dir) if settings.backends_dir else None
         self._locks = {n: asyncio.Lock() for n in UPDATABLE}
         self._info: dict[str, dict] = {
-            n: {"state": "idle", "error": "", "latest": "", "checked_at": 0.0} for n in UPDATABLE
+            n: {"state": "idle", "error": "", "latest": "", "via": "", "checked_at": 0.0} for n in UPDATABLE
         }
         self._camoufox_installed = ""
         self._asset: dict[str, str] = {}  # obscura: url / digest of the last check
@@ -173,6 +173,7 @@ class BackendUpdater:
             installed=installed,
             source="updated" if updated else "built-in",
             latest=info["latest"],
+            latest_via=info["via"],
             checked_at=info["checked_at"],
             state=info["state"],
             error=info["error"] or integrity.FAILED.get(name, ""),
@@ -243,9 +244,30 @@ class BackendUpdater:
 
     async def _latest_camoufox(self) -> str:
         def read() -> str:
-            from camoufox.__main__ import CamoufoxUpdate
+            info = self._info["camoufox"]
+            try:
+                from camoufox.__main__ import CamoufoxUpdate
 
-            return CamoufoxUpdate().verstr
+                version = CamoufoxUpdate().verstr
+                info["via"] = ""
+                return version
+            except Exception as e:
+                official = e
+            mirror = self._settings.camoufox_mirror_url
+            if mirror:
+                try:
+                    version = camoufox_mirror.latest(mirror, self._transport).version  # type: ignore[arg-type]
+                except Exception as e:
+                    log.info("camoufox mirror check failed: %s", _short(e))
+                else:
+                    info["via"] = "mirror"
+                    return version
+            # 2026-11-19: GitHub suspended the maintainers (daijro, JWriter20), every release repo returns 404
+            if "404" in str(official):
+                raise RuntimeError(
+                    "Camoufox's GitHub releases are unavailable (404, maintainer accounts suspended 2026-11-19); the built-in build keeps working"
+                ) from official
+            raise official
 
         return await asyncio.to_thread(read)
 
@@ -376,8 +398,20 @@ class BackendUpdater:
         try:
             env = {**os.environ, "XDG_CACHE_HOME": str(staging)}
             code, out = await self._run(["camoufox", "fetch"], env=env, timeout=900)
-            if code != 0:
-                raise RuntimeError(f"camoufox fetch failed: {_tail(out)}")
+            # `camoufox fetch` exits 0 even when the download failed: judge by what landed in staging
+            if code != 0 or not any((staging / "camoufox" / "browsers").glob("*/*")):
+                mirror = self._settings.camoufox_mirror_url
+                if not mirror:
+                    raise RuntimeError(f"camoufox fetch failed: {_tail(out)}")
+                log.info("camoufox fetch failed (%s); trying the mirror", _tail(out)[-200:])
+                try:
+                    build = await asyncio.to_thread(camoufox_mirror.latest, mirror, self._transport)
+                    await asyncio.to_thread(camoufox_mirror.install, build, staging, self._transport)
+                except Exception as e:
+                    raise RuntimeError(f"camoufox fetch failed: {_tail(out)}; mirror: {_short(e)}") from e
+                self._info["camoufox"]["via"] = "mirror"
+            else:
+                self._info["camoufox"]["via"] = ""
             code, out = await self._run(["mendarr-worker", "smoke"], env=env, timeout=180)
             if code != 0 or "Firefox" not in _tail(out):
                 raise RuntimeError(f"the new Camoufox build failed its test launch: {_tail(out)}")

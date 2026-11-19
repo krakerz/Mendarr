@@ -74,6 +74,7 @@ hr { border: 0; border-top: 1px solid var(--border); margin: 1.5rem 0; }
   background: linear-gradient(135deg, var(--accent), #a78bfa); color: #fff;
 }
 .brand-mark .icon { width: 17px; height: 17px; }
+.brand-mark .mark { width: 22px; height: 22px; }
 .nav-label { padding: 0 10px; margin: 4px 0; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 .nav-link {
   display: flex; align-items: center; gap: 10px; height: var(--h); padding: 0 10px; border-radius: var(--radius-sm);
@@ -275,17 +276,29 @@ label { color: var(--fg-2); font-weight: 500; }
 .field input, .field select { width: 100%; }
 .field-hint { font-size: 0.8rem; color: var(--muted); }
 
-/* two-column label | control grid; labels align with the control's text baseline */
-.form-grid { display: grid; grid-template-columns: minmax(140px, max-content) minmax(0, 1fr); gap: 12px 24px; align-items: center; }
-.form-grid > label { font-size: 0.875rem; }
-.form-grid input:not([type=checkbox]):not([type=radio]):not([type=hidden]), .form-grid select { width: 100%; max-width: 520px; }
+/* two-column label | control grid: one fixed label column everywhere so field edges line up across cards */
+:root { --label-col: 180px; --field-max: 520px; }
+.form-grid { display: grid; grid-template-columns: var(--label-col) minmax(0, 1fr); gap: 12px 24px; align-items: start; }
+.form-grid > label { font-size: 0.875rem; min-height: var(--h); display: flex; align-items: center; line-height: 1.3; }
+.form-grid input:not([type=checkbox]):not([type=radio]):not([type=hidden]), .form-grid select, .form-grid textarea:not(.code) { width: 100%; max-width: var(--field-max); }
+.form-grid textarea:not(.code) { resize: vertical; min-height: var(--h); font-size: 0.8125rem; line-height: 1.45; }
 .form-grid > .full, .form-grid > .form-actions { grid-column: 1 / -1; }
 .form-grid > .form-actions { display: flex; justify-content: flex-end; gap: 8px; padding-top: 8px; margin-top: 4px; border-top: 1px solid var(--border); }
-.checks { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+.form-grid > div:has(> .btn-primary) { margin-top: 4px; }
+/* empty spacer cell before a label-less row: drop it so it doesn't add a double row gap */
+.form-grid > span:empty { display: none; }
+.form-grid > span:empty + div { grid-column: 2; }
+.hint { max-width: var(--field-max); margin-top: 6px; font-size: 0.8125rem; line-height: 1.45; color: var(--muted); }
+.checks { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 20px; min-height: var(--h); }
 .checks label { display: inline-flex; align-items: center; gap: 8px; font-weight: 400; color: var(--fg); cursor: pointer; }
+/* secondary action rows use the small control height for every control */
+select.select-sm { height: var(--h-sm); padding: 0 28px 0 10px; font-size: 0.8125rem; border-radius: 6px; background-position: calc(100% - 15px) 50%, calc(100% - 10px) 50%; }
+.subcard { background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px; margin-top: 20px; }
 @media (max-width: 700px) {
-  .form-grid { grid-template-columns: 1fr; gap: 6px; }
-  .form-grid > label { margin-top: 8px; }
+  .form-grid { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .form-grid > label { margin-top: 8px; min-height: 0; }
+  .form-grid > span:empty + div { grid-column: auto; }
+  .form-grid > div:has(> .btn-primary) { margin-top: 10px; }
 }
 
 textarea.code {
@@ -374,6 +387,7 @@ dl.kv dt:last-of-type, dl.kv dd:last-of-type { border-bottom: 0; }
 .auth-head { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-bottom: 28px; text-align: center; }
 .auth-head .brand-mark { width: 44px; height: 44px; border-radius: 12px; }
 .auth-head .brand-mark .icon { width: 24px; height: 24px; }
+.auth-head .brand-mark .mark { width: 32px; height: 32px; }
 .auth-head h1 { font-size: 1.35rem; }
 .auth-head p { margin: 0; color: var(--muted); }
 .auth-form { display: flex; flex-direction: column; gap: 16px; }
@@ -414,3 +428,29 @@ dl.kv dt:last-of-type, dl.kv dd:last-of-type { border-bottom: 0; }
 .backends-status form { margin: 0; }
 .btn-row { display: inline-flex; align-items: center; justify-content: flex-end; gap: 6px; }
 .btn-row form { margin: 0; }
+
+/* LLM endpoint panels (Settings) */
+.endpoint { border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); padding: 14px 16px 16px; margin-top: 14px; }
+.endpoint-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.endpoint-head .actions { flex-wrap: nowrap; margin-left: auto; }
+.endpoint-head .endpoint-status { flex: none; }
+.endpoint-id { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 240px; }
+.endpoint-id > div { min-width: 0; }
+.endpoint-name { font-size: 0.95rem; font-weight: 600; color: var(--fg); }
+.endpoint-url { font-size: 0.78rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.order-pos.off { background: var(--grey-bg); color: var(--grey); }
+.endpoint-status { display: inline-flex; align-items: center; min-height: var(--h-sm); min-width: 0; max-width: 40vw; font-size: 0.8125rem; }
+.endpoint-chip { display: inline-flex; align-items: center; gap: 6px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.endpoint-status.htmx-request > * { display: none; }
+.endpoint-status.htmx-request::after { content: "testing…"; color: var(--muted); }
+.model-field { display: contents; }
+.model-loaded { color: var(--green); }
+.endpoint .form-grid { margin-top: 14px; grid-template-columns: calc(var(--label-col) - 17px) minmax(0, 1fr); } /* panel border+padding = 17px, so fields line up with the ones outside */
+@media (max-width: 700px) { .endpoint .form-grid { grid-template-columns: minmax(0, 1fr); } }
+.btn-ghost-danger { color: var(--red); }
+.btn-ghost-danger:hover { background: var(--red-bg); color: var(--red); }
+
+/* incident detail: live activity */
+.live-dot { display: inline-block; width: 8px; height: 8px; margin-right: 6px; border-radius: 50%; background: var(--blue); animation: live-pulse 1.4s ease-in-out infinite; vertical-align: middle; }
+@keyframes live-pulse { 50% { opacity: 0.3; } }
+@media (prefers-reduced-motion: reduce) { .live-dot { animation: none; } }

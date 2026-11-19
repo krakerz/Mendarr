@@ -98,6 +98,7 @@ When a fix only needs a newer browser build (for example a newer user agent), up
 
 - **obscura**: downloads the latest release binary from GitHub (sha256-checked when the release publishes a digest), test-launches it, then idle browsers switch to it on their next use.
 - **Camoufox**: downloads the newest browser build that matches the installed Camoufox package, test-launches it, then restarts the worker once no solve, session or manual solve is open. **Restart now** applies it at once and closes open sessions.
+- **Camoufox source**: official releases first. If they are unavailable (the Camoufox maintainers' GitHub accounts were suspended on 2026-11-19), the build comes from a mirror (`jo-inc/camofox-browser`, the releases `camoufox.com` links) and is sha256-checked against the digest GitHub publishes; the card shows "via mirror". `MENDARR_CAMOUFOX_MIRROR_URL` (worker env) sets the mirror's releases API URL, empty disables the fallback; for image builds use `--build-arg CAMOUFOX_MIRROR_URL=...`.
 - **patchright**: its Chromium is pinned to the patchright package, so it only updates with a new worker image.
 - **Revert** goes back to the previous build, or to the one in the image.
 - Every updated build gets a hash list; a build that changed on disk is ignored (with a warning in the log and on the card) and the image's build is used.
@@ -169,6 +170,7 @@ Settings can be passed as environment variables or managed in `mendarr.yml` stor
 | `MENDARR_UI_SESSION_HOURS` | `168.0` | Dashboard session duration in hours (default 7 days) |
 | `MENDARR_BACKEND_AUTO_UPDATE` | `false` | Worker: install new obscura and Camoufox browser builds automatically |
 | `MENDARR_BACKEND_UPDATE_INTERVAL` | `24h` | Worker: how often the auto update looks (minimum 1h) |
+| `MENDARR_CAMOUFOX_MIRROR_URL` | `https://api.github.com/repos/jo-inc/camofox-browser/releases` | Worker: fallback source for the Camoufox build when the official releases fail; empty = no fallback |
 | `MENDARR_BACKENDS_DIR` | `/data/backends` | Worker: volume holding updated builds; empty = image versions only |
 
 ### Notifications & LLM (`mendarr.yml`)

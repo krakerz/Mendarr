@@ -43,6 +43,7 @@ llm:
       reasoning_effort: none                   # "none" turns Gemma 4 thinking off in LM Studio
       max_tokens: 6144
       dom_chars: 12000
+      # extra_body: {chat_template_kwargs: {enable_thinking: false}}   # optional, merged into every request (Qwen3 / vLLM / NIM thinking switch)
 
 # solver:                     # optional; also on the Settings page (Solver card)
   # default_backend: camoufox   # camoufox | patchright | obscura, for plugins without their own backend; overrides MENDARR_DEFAULT_BACKEND

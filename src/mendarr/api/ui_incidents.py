@@ -11,7 +11,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse, Response
 
 from mendarr.api.auth import require_user
 from mendarr.api.ui_manual import picker_context
-from mendarr.plugins.store import OPEN_INCIDENTS
+from mendarr.healer.config import default_backend
+from mendarr.plugins.store import BACKEND_FOLLOWS_DEFAULT, OPEN_INCIDENTS, StoreError
 from mendarr.web import error_page, render
 
 router = APIRouter(dependencies=[Depends(require_user)])
@@ -94,18 +95,68 @@ def incident_page(request: Request, iid: int) -> Response:
         return error_page(request, 404, f"No incident #{iid}")
     trace = st.traces.load(inc["trace_id"]) if inc["trace_id"] else None
     mt = _PLUGIN_REF.match(inc["plugin"] or "")
+    attempts = st.store.attempts(iid)
+    attempts_view = [{**a, "backend": _trace_backend(st, a["trace_id"])} for a in reversed(attempts)]
     return render(
         request,
         "incident.html",
         active="incidents",
         inc=inc,
-        attempts=list(reversed(st.store.attempts(iid))),
+        attempts=attempts_view,
+        backend=_incident_backend(st, inc, trace),
+        activity=_activity(st, iid),
+        stamp=_stamp(st, inc, attempts),
         trace=trace,
         plugin_scope=mt.group("scope") if mt else None,
         can_manual=bool(inc["state"] in OPEN_INCIDENTS and inc["url"]),
         closed=inc["state"] in ("solved", "gave_up"),
         **picker_context(st),
     )
+
+
+def _trace_backend(st, trace_id: str) -> str:
+    """Backend recorded in a trace's meta ("" when unknown: old trace, or none saved)."""
+    t = st.traces.load(trace_id) if trace_id else None
+    return str(t.meta.get("backend") or "") if t else ""
+
+
+def _incident_backend(st, inc: dict, trace) -> dict:
+    """{name, note}: the failure trace's recorded backend, else an inferred one labelled as such."""
+    if trace is not None and trace.meta.get("backend"):
+        return {"name": trace.meta["backend"], "note": ""}
+    cfg_default = default_backend(st.settings, st.config_file.get())
+    mt = _PLUGIN_REF.match(inc["plugin"] or "")
+    if mt:
+        try:
+            declared = st.store.get(mt.group("scope"), int(mt.group("version"))).backend
+        except StoreError:
+            declared = BACKEND_FOLLOWS_DEFAULT
+        if declared and declared != BACKEND_FOLLOWS_DEFAULT:
+            return {"name": declared, "note": "inferred from plugin"}
+    return {"name": cfg_default, "note": "inferred, configured default"}
+
+
+def _activity(st, iid: int) -> dict | None:
+    tracker = getattr(st, "tracker", None)
+    return next((t for t in tracker.items() if t["incident_id"] == iid), None) if tracker is not None else None
+
+
+def _stamp(st, inc: dict, attempts: list[dict]) -> str:
+    # changes whenever anything the detail page shows changes; the page polls it and re-renders only then
+    act = _activity(st, inc["id"])
+    return "|".join(
+        str(v)
+        for v in (inc["state"], inc["updated"], inc["next_attempt_at"], len(attempts), act["description"] if act else "")
+    )
+
+
+@router.get("/incidents/{iid:int}/stamp")
+def incident_stamp(request: Request, iid: int) -> Response:
+    st = request.app.state
+    inc = st.store.incident(iid)
+    if inc is None:
+        return Response(status_code=404)
+    return Response(_stamp(st, inc, st.store.attempts(iid)), media_type="text/plain", headers={"Cache-Control": "no-store"})
 
 
 @router.get("/incidents/{iid:int}/attempts/{aid:int}/transcript")

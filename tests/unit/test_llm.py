@@ -92,3 +92,22 @@ async def test_complete_errors():
         await c3.complete(ep, [])
     for x in (c, c2, c3):
         await x.aclose()
+
+
+async def test_complete_extra_body_merged_but_not_reserved():
+    seen = {}
+
+    def handler(req):
+        if req.url.path.endswith("/models"):
+            return httpx.Response(200, json={"data": [{"id": "m1"}]})
+        seen["body"] = json.loads(req.content)
+        return httpx.Response(200, json={"choices": [{"message": {"content": "hi"}}]})
+
+    c = client(handler)
+    extra = {"chat_template_kwargs": {"enable_thinking": False}, "temperature": 0.2, "model": "evil", "stream": True}
+    ep = await c.probe("a", LlmProfile(base_url="http://x/v1", extra_body=extra))
+    await c.complete(ep, [{"role": "user", "content": "q"}])
+    b = seen["body"]
+    assert b["chat_template_kwargs"] == {"enable_thinking": False} and b["temperature"] == 0.2
+    assert b["model"] == "m1" and b["stream"] is False
+    await c.aclose()
