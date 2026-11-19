@@ -127,6 +127,7 @@ class TraceStore:
             "failure": failure,
             "detail": detail,
             "plugin": plugin,
+            "backend": result.backend if result else "",
             "incident_id": incident_id,
             "final_url": snap.url if snap else "",
             "status": snap.status if snap else None,

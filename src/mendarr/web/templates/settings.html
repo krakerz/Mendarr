@@ -43,33 +43,40 @@
       <h2>{{ m.icon("network") }} LLM endpoints</h2>
     </div>
     
-    <form method="post" action="/ui/settings/llm-order" class="form-grid" style="margin-bottom: 24px;">
+    <form method="post" action="/ui/settings/llm-order" class="form-grid" style="margin-bottom: 8px;">
       {{ m.csrf_field() }}
       <label for="order">Execution priority order</label>
       <input id="order" name="order" value="{{ order }}" placeholder="pc, laptop, openrouter">
       <span></span>
       <div>
-        <button class="btn btn-sm btn-primary">{{ m.icon("save") }} Save order</button>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save order</button>
       </div>
     </form>
 
     {% for p in profiles %}
-    <hr>
-    <div class="card-head" style="margin-top: 16px;">
-      <h3>Endpoint: <span class="mono">{{ p.name }}</span></h3>
+    <div class="endpoint">
+    <div class="endpoint-head">
+      <div class="endpoint-id">
+        {% if p.rank %}<span class="order-pos" title="Tried {{ p.rank }}{{ ['st','nd','rd'][p.rank - 1] if p.rank < 4 else 'th' }} in the priority order">{{ p.rank }}</span>
+        {% else %}<span class="order-pos off" title="Not in the priority order: never used">–</span>{% endif %}
+        <div>
+          <div class="endpoint-name mono">{{ p.name }}</div>
+          <div class="endpoint-url muted mono" title="{{ p.base_url }}">{{ p.base_url }}</div>
+        </div>
+      </div>
       <div class="actions">
-        <button class="btn btn-sm" hx-post="/ui/settings/llm/{{ p.name }}/check" hx-target="#check-{{ p.name }}">{{ m.icon("refresh-cw") }} Test connection</button>
-        <span id="check-{{ p.name }}" class="muted" style="font-size: 0.8125rem;"></span>
+        <span id="check-{{ p.name }}" class="endpoint-status" aria-live="polite">{% if p.status %}{% set status = p.status %}{% include "_settings_check.html" %}{% endif %}</span>
+        <button class="btn btn-sm" hx-post="/ui/settings/llm/{{ p.name }}/check" hx-target="#check-{{ p.name }}" hx-indicator="#check-{{ p.name }}">{{ m.icon("refresh-cw") }} Test connection</button>
         <form method="post" action="/ui/settings/llm/{{ p.name }}/delete" onsubmit="return confirm('Delete endpoint {{ p.name|e }}?')">
           {{ m.csrf_field() }}
-          <button class="btn btn-sm btn-danger">{{ m.icon("trash-2") }} Delete</button>
+          <button class="btn btn-sm btn-icon btn-ghost btn-ghost-danger" title="Delete endpoint {{ p.name }}" aria-label="Delete endpoint {{ p.name }}">{{ m.icon("trash-2") }}</button>
         </form>
       </div>
     </div>
     <form method="post" action="/ui/settings/llm/{{ p.name }}" class="form-grid">
       {{ m.csrf_field() }}
       <label>Base URL</label><input name="base_url" value="{{ p.base_url }}" required>
-      <label>Model</label><input name="model" value="{{ p.model }}" placeholder="first listed">
+      <label>Model</label>{% include "_settings_model.html" %}
       <label>API key</label><input type="password" name="api_key" autocomplete="new-password" placeholder="{{ p.secret }}">
       <span></span>
       <div class="checks">
@@ -77,6 +84,10 @@
         <label><input type="checkbox" name="vision"{% if p.vision %} checked{% endif %}> Support vision (screenshot inspection)</label>
       </div>
       <label>Reasoning effort</label><input name="reasoning_effort" value="{{ p.reasoning_effort }}" placeholder="default">
+      <label for="extra-{{ p.name }}">Extra request JSON</label><div>
+        <textarea id="extra-{{ p.name }}" name="extra_body" rows="2" class="mono" spellcheck="false" placeholder="optional JSON object">{{ p.extra_body }}</textarea>
+        <div class="hint">Merged into every request, e.g. <code>{"chat_template_kwargs": {"enable_thinking": false}}</code> to turn thinking off on Qwen3 / vLLM / NIM</div>
+      </div>
       <label>Max tokens</label><input name="max_tokens" value="{{ p.max_tokens }}" placeholder="8192">
       <label>Timeout (s)</label><input name="timeout_s" value="{{ p.timeout_s }}" placeholder="600">
       <span></span>
@@ -84,6 +95,7 @@
         <button class="btn btn-primary">{{ m.icon("save") }} Save endpoint</button>
       </div>
     </form>
+    </div>
     {% else %}
     <p class="muted">No LLM endpoints configured yet.</p>
     {% endfor %}
@@ -153,13 +165,13 @@
       <label>Refresh interval</label>
       <div>
         <input name="refresh_interval" value="{{ cookies.refresh_interval }}" placeholder="{{ cookies.env_interval or 'off' }}">
-        <div class="muted" style="font-size: 0.8125rem;">6h, 90m, 0 = off; empty uses the environment value</div>
+        <div class="hint">6h, 90m, 0 = off; empty uses the environment value</div>
       </div>
       <label>Idle days</label><input name="refresh_idle_days" value="{{ cookies.refresh_idle_days }}" placeholder="{{ cookies.env_idle }}">
       <label>Solve timeout</label>
       <div>
         <input name="refresh_timeout" value="{{ cookies.refresh_timeout }}" placeholder="60s">
-        <div class="muted" style="font-size: 0.8125rem;">Time limit for one background re-solve (90s, 2m; minimum 10s)</div>
+        <div class="hint">Time limit for one background re-solve (90s, 2m; minimum 10s)</div>
       </div>
       <span></span>
       <div>
@@ -180,7 +192,7 @@
           <option value=""{% if not solver.default_backend %} selected{% endif %}>use environment ({{ solver.env_backend }})</option>
           {% for b in solver.backends %}<option value="{{ b }}"{% if solver.default_backend == b %} selected{% endif %}>{{ b }}</option>{% endfor %}
         </select>
-        <div class="muted" style="font-size: 0.8125rem;">Browser engine for automated solves whose plugin sets no backend of its own (a plugin's own backend always wins)</div>
+        <div class="hint">Browser engine for automated solves whose plugin sets no backend of its own (a plugin's own backend always wins)</div>
       </div>
       <label>Backend switch order</label>
       <div>
@@ -190,13 +202,13 @@
           <div class="order-pills"></div>
           <div class="order-spare"></div>
         </div>
-        <div class="muted" style="font-size: 0.8125rem; margin-top: 6px;">Drag a backend, or use its arrows, to change the order; the cross takes it out and the dashed buttons add one back. The healer switches a failing plugin to the next one; manual solve offers them in this order (never obscura, it has no live view).</div>
+        <div class="hint">Drag a backend, or use its arrows, to change the order; the cross takes it out and the dashed buttons add one back. The healer switches a failing plugin to the next one; manual solve offers them in this order (never obscura, it has no live view).</div>
         <script src="/ui/static/js/backend-order.js?v={{ asset_v }}" defer></script>
       </div>
       <label>Browser language</label>
       <div>
         <input name="locale" value="{{ solver.locale }}" placeholder="empty = worker setting / exit country's main language">
-        <div class="muted" style="font-size: 0.8125rem;">e.g. en-US; applies to every backend; a browser picks it up on its next launch (busy browsers with an open session or manual solve keep their language until they are free)</div>
+        <div class="hint">e.g. en-US; applies to every backend; a browser picks it up on its next launch (busy browsers with an open session or manual solve keep their language until they are free)</div>
       </div>
       <span></span>
       <div>
@@ -218,7 +230,7 @@
       <label>Check interval</label>
       <div>
         <input name="interval" value="{{ updates.interval }}" placeholder="{{ updates.env_interval or '24h' }}">
-        <div class="muted" style="font-size: 0.8125rem;">12h, 1d; minimum 1h; empty uses the environment value</div>
+        <div class="hint">12h, 1d; minimum 1h; empty uses the environment value</div>
       </div>
       <span></span>
       <div>
@@ -226,7 +238,7 @@
       </div>
     </form>
     {% set v = updates.view %}
-    <div class="card" style="background: var(--surface-2); border-color: var(--border); margin-top: 20px;">
+    <div class="subcard">
       <div class="row" style="justify-content: space-between;">
         <div>
           <div style="font-weight: 500; font-size: 0.875rem;">
@@ -272,7 +284,7 @@
           <td class="cell-main">{{ b.name }}</td>
           <td>{{ "Chromium (pinned)" if b.name == "patchright" else (b.component or "-") }}</td>
           <td>{{ b.installed or "unknown" }}<span class="cell-sub">{{ "updated" if b.source == "updated" else "built-in" }}</span></td>
-          <td>{% if b.name == "patchright" %}<span class="muted">-</span>{% else %}{{ b.latest or "-" }}{% endif %}</td>
+          <td>{% if b.name == "patchright" %}<span class="muted">-</span>{% else %}{{ b.latest or "-" }}{% if b.latest and b.latest_via == "mirror" %}<span class="cell-sub" title="jo-inc/camofox-browser">via mirror</span>{% endif %}{% endif %}</td>
           <td>{% if b.state == "failed" %}failed: {{ b.error }}{% elif b.state == "pending_restart" %}waiting for a worker restart{% elif b.state == "idle" %}{% if b.error %}{{ b.error }}{% else %}<span class="muted">-</span>{% endif %}{% else %}{{ b.state }}{% endif %}</td>
           <td class="muted">{{ b.checked_at|ts if b.checked_at else "-" }}</td>
           <td class="actions-cell">
@@ -321,7 +333,7 @@
     <div class="card-head">
       <h2>{{ m.icon("bell") }} Notifications</h2>
     </div>
-    <form method="post" action="/ui/settings/notify" class="form-grid" style="margin-bottom: 20px;">
+    <form method="post" action="/ui/settings/notify" class="form-grid">
       {{ m.csrf_field() }}
       <label>Discord webhook</label><input type="password" name="discord_webhook" autocomplete="new-password" placeholder="{{ secrets.discord }}">
       <span></span>
@@ -330,7 +342,7 @@
       </div>
       <label>Discord ping</label>
       <div>
-        <input name="discord_ping" list="discord-ping-options" value="{{ cfg.notify.discord_ping }}" placeholder="e.g. @here, @everyone, or <@&role_id>" style="max-width: 320px;">
+        <input name="discord_ping" list="discord-ping-options" value="{{ cfg.notify.discord_ping }}" placeholder="e.g. @here, @everyone, or <@&role_id>">
         <datalist id="discord-ping-options">
           <option value="@here">
           <option value="@everyone">
@@ -353,12 +365,12 @@
         <button class="btn btn-primary">{{ m.icon("save") }} Save notifications</button>
       </div>
     </form>
-    <div class="card" style="background: var(--surface-2); border-color: var(--border);">
+    <div class="subcard">
       <div class="row" style="justify-content: space-between;">
         <span style="font-weight: 500; font-size: 0.875rem;">Send test notification payload:</span>
         <div class="actions">
           <form hx-post="/ui/settings/notify/test" hx-target="#notify-result" class="row">
-            <select name="event" aria-label="Event">{% for e in events %}<option value="{{ e }}">{{ titles[e] }}</option>{% endfor %}</select>
+            <select class="select-sm" name="event" aria-label="Event">{% for e in events %}<option value="{{ e }}">{{ titles[e] }}</option>{% endfor %}</select>
             <button class="btn btn-sm">{{ m.icon("send") }} Send test</button>
           </form>
           <span id="notify-result" class="muted"></span>
@@ -377,7 +389,7 @@
     <form method="post" action="/ui/settings/raw">
       {{ m.csrf_field() }}
       <textarea class="code" name="text" spellcheck="false" aria-label="mendarr.yml" rows="22">{{ text }}</textarea>
-      <div style="margin-top: 14px;">
+      <div style="margin-top: 16px;">
         <button class="btn btn-primary">{{ m.icon("save") }} Save raw YAML</button>
       </div>
     </form>

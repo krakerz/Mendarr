@@ -120,15 +120,42 @@ def test_history_and_demo():
     hist = [
         {"heal_window": 0, "round": 0, "result": "guard", "detail": "import os", "version": None, "scope": "",
          "trace_id": ""},
-        {"heal_window": 1, "round": 1, "result": "replay_failed", "detail": "Q" * 600, "version": 3,
+        {"heal_window": 1, "round": 1, "result": "replay_failed", "detail": "Q" * 2000, "version": 3,
          "scope": "e.com", "trace_id": "e.com--2-abcdef", "source": SRC},
     ]
     demo = trace(meta={"extra": {"clicks": [[1, 2]]}, "steps": ["human clicked"]})
     t = text_of(build(history=hist, demo=demo, load_trace=lambda tid: trace(meta={"steps": ["replay step"]})))
     assert "window 1 round 1: guard" in t and "window 2 round 2: replay_failed" in t
     assert "### Last candidate (e.com@v3)" in t and "### Its replay" in t and "replay step" in t
-    assert "Q" * 401 not in t and "Q" * 400 in t
+    assert "Q" * 1501 not in t and "Q" * 1500 in t
     assert "## Demonstration by a human" in t and "human clicked" in t
+
+
+def _cand(i, source=SRC, detail="bad", version=True):
+    return {"heal_window": 0, "round": i, "result": "replay_failed", "detail": detail,
+            "version": i + 1 if version else None, "scope": "e.com", "trace_id": f"t{i}", "source": source}
+
+
+def test_three_candidates_with_code():
+    hist = [_cand(i, source=f"# cand{i}\n" + SRC, detail=f"why{i} " + "R" * 2000) for i in range(4)]
+    dom_trace = lambda tid: trace(meta={"steps": [f"replay {tid}"]}, dom="<html>DOM" + tid + "</html>")  # noqa: E731
+    t = text_of(build(history=hist, load_trace=dom_trace))
+    assert "# cand3" in t and "# cand2" in t and "# cand1" in t and "# cand0" not in t
+    assert t.index("### Last candidate (e.com@v4)") < t.index("### Earlier candidate (e.com@v3)")
+    assert t.index("### Earlier candidate (e.com@v3)") < t.index("### Earlier candidate (e.com@v2)")
+    assert "### Earlier candidate (e.com@v1)" not in t
+    assert t.count("### Its replay") == 1 and "replay t3" in t and "replay t2" not in t
+    assert "DOMt3" in t and "DOMt2" not in t and "DOMt1" not in t
+    # older candidate shows its full failure reason (capped), the 4th row only the short cap
+    assert "R" * 1400 in t and "R" * 1501 not in t.split("### Earlier candidate (e.com@v2)")[1]
+
+
+def test_older_source_truncated():
+    big = "x = 1\n" * 3000
+    hist = [_cand(0, source=big), _cand(1)]
+    t = text_of(build(history=hist))
+    assert "# … (truncated)" in t
+    assert big not in t and big[: prompt.OLDER_SOURCE_CHARS] in t
 
 
 def test_switch_backend_order_and_steps():

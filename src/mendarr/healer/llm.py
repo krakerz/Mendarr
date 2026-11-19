@@ -10,6 +10,7 @@ from mendarr.healer.config import LlmProfile
 
 log = logging.getLogger(__name__)
 PROBE_TIMEOUT_S = 3.0
+RESERVED_BODY_KEYS = frozenset({"model", "messages", "stream"})  # extra_body can't change these
 
 
 class LlmUnavailable(Exception):
@@ -49,21 +50,60 @@ def _headers(profile: LlmProfile) -> dict[str, str]:
 class LlmClient:
     def __init__(self, transport: httpx.AsyncBaseTransport | None = None) -> None:
         self._http = httpx.AsyncClient(transport=transport)
+        self.last_error = ""  # why the last probe failed, for the Settings page (never holds the key)
+        self.last_code = ""  # short status for the chip: "200", "401", "timeout", "unreachable", "bad reply", "no model"
+        self.last_ids: list[str] = []  # model ids from the last /models reply ([] on failure)
+        self.embedding_ids: set[str] = set()  # embeddings models seen by the last model_states()
 
     async def probe(self, name: str, profile: LlmProfile) -> Endpoint | None:
         url = f"{profile.base_url.rstrip('/')}/models"
+        self.last_ids = []
         try:
             r = await self._http.get(url, headers=_headers(profile), timeout=PROBE_TIMEOUT_S)
             r.raise_for_status()
             ids = [str(m["id"]) for m in r.json()["data"]]
+        except httpx.HTTPStatusError as e:
+            log.info("llm %s unreachable: %s", name, e)
+            code = e.response.status_code
+            self.last_code = str(code)
+            self.last_error = f"HTTP {code}" + (" (check the API key)" if code in (401, 403) else "")
+            return None
         except (httpx.HTTPError, ValueError, KeyError, TypeError) as e:
             log.info("llm %s unreachable: %s", name, e)
+            if isinstance(e, httpx.HTTPError):
+                self.last_code = "timeout" if isinstance(e, httpx.TimeoutException) else "unreachable"
+            else:
+                self.last_code = "bad reply"
+            self.last_error = type(e).__name__ if isinstance(e, httpx.HTTPError) else "not an OpenAI-compatible /models reply"
             return None
+        self.last_ids = ids
         model = match_model(profile.model, ids)
         if model is None:
+            self.last_code = "no model"
             log.warning("llm %s: no model matches %r (have %s)", name, profile.model, ids)
+            self.last_error = f"no loaded model matches {profile.model!r}" if ids else "no model loaded"
             return None
+        self.last_error = ""
+        self.last_code = str(r.status_code)
         return Endpoint(name, profile, model)
+
+    async def model_states(self, profile: LlmProfile) -> dict[str, bool]:
+        """Best-effort LM Studio native API: {model id: loaded} for non-embeddings models, {} elsewhere."""
+        self.embedding_ids = set()
+        base = profile.base_url.rstrip("/").removesuffix("/v1")
+        try:
+            r = await self._http.get(f"{base}/api/v0/models", headers=_headers(profile), timeout=PROBE_TIMEOUT_S)
+            r.raise_for_status()
+            states: dict[str, bool] = {}
+            for m in r.json()["data"]:
+                if m.get("type") == "embeddings":
+                    self.embedding_ids.add(str(m["id"]))
+                else:
+                    states[str(m["id"])] = m.get("state") == "loaded"
+        except (httpx.HTTPError, ValueError, KeyError, TypeError, AttributeError):
+            self.embedding_ids = set()
+            return {}
+        return states
 
     async def pick(self, order: list[str], profiles: dict[str, LlmProfile]) -> Endpoint | None:
         for name in order:
@@ -86,6 +126,7 @@ class LlmClient:
         ):
             if value is not None:
                 body[key] = value
+        body.update({k: v for k, v in p.extra_body.items() if k not in RESERVED_BODY_KEYS})
         url = f"{p.base_url.rstrip('/')}/chat/completions"
         t0 = time.monotonic()
         try:

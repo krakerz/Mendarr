@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+import json
 import os
 import re
 import shutil
@@ -18,7 +19,7 @@ from mendarr.api.auth import require_user
 from mendarr.api.worker_client import WorkerRejected, WorkerUnavailable
 from mendarr.healer.config import LOCALE_TAG, MIN_UPDATE_S, HealerConfig, HealerTuning, parse, parse_duration, update_policy
 from mendarr.plugins.guard import BACKENDS
-from mendarr.healer.llm import LlmClient
+from mendarr.healer.llm import RESERVED_BODY_KEYS, LlmClient, match_model
 from mendarr.healer.notify import TITLES, Notice, Notifier
 from mendarr.web import error_page, render, templates
 
@@ -125,6 +126,24 @@ def _secret_field(target: dict, form, key: str, clear_key: str) -> None:
         target.pop(key, None)
 
 
+def _llm_cache(request: Request) -> dict:
+    st = request.app.state
+    if getattr(st, "llm_models", None) is None:
+        st.llm_models = {}
+    return st.llm_models
+
+
+def _model_match(model: str, models: list[dict]) -> str | None:
+    # the healer accepts a partial name (first listed id containing it), so show which id that resolves to
+    return match_model(model, [m["id"] for m in models]) if model and models else None
+
+
+def _model_list(request: Request, name: str) -> list[dict]:
+    entry = _llm_cache(request).get(name) or {}
+    loaded = set(entry.get("loaded", []))
+    return sorted(({"id": i, "loaded": i in loaded} for i in entry.get("ids", [])), key=lambda m: (not m["loaded"], m["id"]))
+
+
 def _context(request: Request, text: str | None = None, **extra: object) -> dict:
     path = _path(request)
     raw, file_text, file_error = _load(path)
@@ -136,19 +155,26 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
     llm_raw = raw.get("llm") if isinstance(raw.get("llm"), dict) else {}
     raw_profiles = llm_raw.get("profiles") if isinstance(llm_raw.get("profiles"), dict) else {}
     names = list(raw_profiles) or list(cfg.llm.profiles)
+    raw_order = llm_raw.get("order")
+    order_names = [str(n) for n in raw_order] if isinstance(raw_order, list) else list(cfg.llm.order)
     profiles = []
     for name in names:
         p = raw_profiles.get(name) if isinstance(raw_profiles.get(name), dict) else {}
         profiles.append(
             {
                 "name": name,
+                "rank": order_names.index(name) + 1 if name in order_names else None,
                 "base_url": p.get("base_url", ""),
                 "model": p.get("model", ""),
                 "vision": bool(p.get("vision", False)),
                 "reasoning_effort": p.get("reasoning_effort") or "",
                 "max_tokens": p.get("max_tokens", ""),
                 "timeout_s": p.get("timeout_s", ""),
+                "extra_body": json.dumps(p["extra_body"]) if isinstance(p.get("extra_body"), dict) and p["extra_body"] else "",
                 "secret": _secret_state(p.get("api_key")),
+                "models": _model_list(request, name),
+                "match": _model_match(p.get("model", ""), _model_list(request, name)),
+                "status": (_llm_cache(request).get(name) or {}).get("status"),
             }
         )
     esc_raw = raw.get("escalation") if isinstance(raw.get("escalation"), dict) else {}
@@ -307,8 +333,38 @@ async def llm_save(request: Request, name: str) -> Response:
             p.pop("max_tokens", None)
         p["vision"] = _flag(form, "vision")
         _secret_field(p, form, "api_key", "clear_api_key")
+        extra = str(form.get("extra_body", "")).strip()
+        if not extra:
+            p.pop("extra_body", None)
+            return
+        try:
+            obj = json.loads(extra)
+        except ValueError as e:
+            raise _Bad(f"Extra request JSON: {e}") from e
+        if not isinstance(obj, dict):
+            raise _Bad('Extra request JSON must be an object, e.g. {"chat_template_kwargs": {"enable_thinking": false}}')
+        if reserved := sorted(RESERVED_BODY_KEYS & obj.keys()):
+            raise _Bad(f"Extra request JSON can't set {', '.join(reserved)}")
+        p["extra_body"] = obj
 
-    return await _edit(request, mutate, f"Saved endpoint {name}", "llm")
+    old_url = ""
+
+    def remember(raw: dict, form) -> None:
+        nonlocal old_url
+        old_url = str(_profile(raw, name).get("base_url", ""))
+        mutate(raw, form)
+
+    resp = await _edit(request, remember, f"Saved endpoint {name}", "llm")
+    if resp.status_code == 303:
+        cache = _llm_cache(request)
+        _, text, _err = _load(_path(request))
+        with contextlib.suppress(Exception):  # a probe must never fail the save
+            prof = parse(text).llm.profiles.get(name)
+            if prof is not None:
+                if prof.base_url != old_url:
+                    cache.pop(name, None)
+                await _probe_into_cache(request, name, prof)
+    return resp
 
 
 @router.post("/settings/llm/{name}/delete")
@@ -320,7 +376,10 @@ async def llm_delete(request: Request, name: str) -> Response:
         if isinstance(llm.get("order"), list):
             llm["order"] = [n for n in llm["order"] if n != name]
 
-    return await _edit(request, mutate, f"Deleted endpoint {name}", "llm")
+    resp = await _edit(request, mutate, f"Deleted endpoint {name}", "llm")
+    if resp.status_code == 303:
+        _llm_cache(request).pop(name, None)
+    return resp
 
 
 @router.post("/settings/budgets")
@@ -536,6 +595,26 @@ def _fragment(request: Request, name: str, **ctx: object) -> Response:
     return templates.TemplateResponse(request, name, ctx)
 
 
+async def _probe_into_cache(request: Request, name: str, prof) -> dict:
+    """Probe one profile and store ids, loaded flags and status in the in-memory cache."""
+    client = LlmClient(transport=getattr(request.app.state, "llm_transport", None))
+    try:
+        ep = await client.probe(name, prof)
+        states = await client.model_states(prof) if client.last_ids else {}
+    finally:
+        await client.aclose()
+    entry = _llm_cache(request).setdefault(name, {"ids": [], "loaded": []})
+    if ep is None:
+        status = {"state": "failed", "code": client.last_code, "reason": client.last_error}
+    else:
+        status = {"state": "ok", "code": client.last_code, "reason": f"model {ep.model}, {len(client.last_ids)} models listed"}
+    if client.last_ids:  # a failed probe keeps the previous list
+        entry["ids"] = [i for i in client.last_ids if i not in client.embedding_ids]
+        entry["loaded"] = [i for i in entry["ids"] if states.get(i)]
+    entry["status"] = status
+    return status
+
+
 @router.post("/settings/llm/{name}/check")
 async def llm_check(request: Request, name: str) -> Response:
     _, text, _err = _load(_path(request))
@@ -544,17 +623,12 @@ async def llm_check(request: Request, name: str) -> Response:
     except (ValueError, yaml.YAMLError):
         prof = None
     if prof is None:
-        return _fragment(request, "_settings_check.html", state="failed", detail="unknown profile — save it first")
-    client = LlmClient(transport=getattr(request.app.state, "llm_transport", None))
-    try:
-        ep = await client.probe(name, prof)
-    finally:
-        await client.aclose()
-    if ep is None:
-        return _fragment(
-            request, "_settings_check.html", state="failed", detail="unreachable or no matching model (see logs)"
-        )
-    return _fragment(request, "_settings_check.html", state="ok", detail=ep.model)
+        status = {"state": "failed", "code": "unsaved", "reason": "unknown profile: save it first"}
+        return _fragment(request, "_settings_check.html", status=status)
+    status = await _probe_into_cache(request, name, prof)
+    models = _model_list(request, name)
+    p = {"name": name, "model": prof.model, "models": models, "match": _model_match(prof.model, models)}
+    return _fragment(request, "_settings_check.html", status=status, oob_model=p)
 
 
 @router.post("/settings/notify/test")

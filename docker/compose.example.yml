@@ -22,6 +22,7 @@ services:
       # Updated obscura / Camoufox builds (Settings -> Browser backends) are kept in the volume below.
       # - MENDARR_BACKEND_AUTO_UPDATE=true      # install new builds on its own (default: off)
       # - MENDARR_BACKEND_UPDATE_INTERVAL=24h   # minimum 1h
+      # - MENDARR_CAMOUFOX_MIRROR_URL=          # Camoufox mirror releases API for when the official ones fail (empty: off)
     volumes:
       - mendarr-backends:/data/backends
       # or a folder on an external drive (Linux filesystem, not noexec; `chown 1000:1000` it first):

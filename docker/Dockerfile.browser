@@ -30,11 +30,24 @@ WORKDIR /app
 COPY --chown=mendarr pyproject.toml uv.lock README.md ./
 RUN uv sync --frozen --no-dev --extra browser --no-install-project
 
+# Chromium needs only the patchright package from the deps layer, so it sits before the source COPY
+RUN patchright install chromium
+
+# fetched as the runtime user so the browser lands in its cache (~/.cache/camoufox); the official releases are
+# gone since the maintainers' GitHub accounts were suspended (2026-11-19), so fall back to the mirror.
+# Done before the source COPY so code edits don't re-download ~1.3 GB: the helper runs standalone from /tmp
+# (--url given, so it never imports the mendarr package) and is removed again.
+ARG CAMOUFOX_MIRROR_URL=https://api.github.com/repos/jo-inc/camofox-browser/releases
+COPY --chown=mendarr src/mendarr/worker/camoufox_mirror.py /tmp/camoufox_mirror.py
+# `camoufox fetch` exits 0 even when the download failed, so success is judged by installed_verstr();
+# the last check fails the build instead of shipping an image without a browser
+RUN (camoufox fetch; python -c "from camoufox.pkgman import installed_verstr; installed_verstr()") \
+    || python /tmp/camoufox_mirror.py install --pinned --url "$CAMOUFOX_MIRROR_URL"; \
+    rm -f /tmp/camoufox_mirror.py; \
+    python -c "from camoufox.pkgman import installed_verstr; print('camoufox', installed_verstr())"
+
 COPY --chown=mendarr src ./src
 RUN uv sync --frozen --no-dev --extra browser
-
-# fetched as the runtime user so the browser lands in its cache (~/.cache/camoufox)
-RUN camoufox fetch && patchright install chromium
 
 # plugin code runs as this user: it must not be able to patch the app or the venv,
 # but fpgen must manage its model data inside site-packages

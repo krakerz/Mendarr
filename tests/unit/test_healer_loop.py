@@ -372,3 +372,56 @@ async def test_backend_switch_follows_the_configured_order(env):
     assert [a["result"] for a in env.store.attempts(inc["id"])] == ["retry_failed", "switch_passed"]
     active = env.store.active("example.com")
     assert active is not None and active.backend == "obscura"
+
+
+MULTI_YAML = BASE_YAML.replace(
+    "order: [fake]\n  profiles: {fake: {base_url: 'http://llm.test/v1', model: fm}}",
+    "order: [a, b]\n  profiles:\n    a: {base_url: 'http://a.test/v1', model: fm}\n    b: {base_url: 'http://b.test/v1', model: fm}",
+)
+
+
+def _rewrite_config(path, text: str) -> None:
+    import os
+
+    path.write_text(text)
+    st = path.stat()
+    os.utime(path, (st.st_atime, st.st_mtime + 10))
+
+
+async def test_endpoint_repicked_every_round(env):
+    healer = env.make(base=MULTI_YAML)
+    await env.fail()
+    cfg_path = env.tmp / "mendarr.yml"
+    swapped = MULTI_YAML.replace("order: [a, b]", "order: [b, a]")
+    orig = env.llm.complete
+
+    async def complete(ep, messages):
+        res = await orig(ep, messages)
+        _rewrite_config(cfg_path, swapped)
+        return res
+
+    env.llm.complete = complete
+    env.llm.texts = [GOOD_REPLY] * 2
+    env.worker.solve_results = [stuck()] * 2
+    await healer.tick()
+    inc = only_incident(env)
+    assert [a["profile"] for a in env.store.attempts(inc["id"])] == ["a", "b"]
+
+
+async def test_endpoint_gone_for_second_round_waits(env):
+    healer = env.make()
+    await env.fail()
+    orig = env.llm.complete
+
+    async def complete(ep, messages):
+        res = await orig(ep, messages)
+        env.llm.up = False
+        return res
+
+    env.llm.complete = complete
+    env.llm.texts = [GOOD_REPLY] * 2
+    env.worker.solve_results = [stuck()] * 2
+    await healer.tick()
+    inc = only_incident(env)
+    assert len(env.store.attempts(inc["id"])) == 1
+    assert inc["state"] == "open" and inc["next_attempt_at"] == env.clock.t + 60

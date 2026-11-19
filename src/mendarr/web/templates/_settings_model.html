@@ -1,0 +1,11 @@
+<div id="model-{{ p.name }}" class="model-field"{% if oob %} hx-swap-oob="true"{% endif %}>
+{%- if p.models -%}
+<select name="model">
+  <option value="">first listed (auto)</option>
+  {% for mo in p.models %}<option value="{{ mo.id }}"{% if mo.loaded %} class="model-loaded"{% endif %}{% if mo.id == p.model %} selected{% endif %}>{{ mo.id }}{% if mo.loaded %} (loaded){% endif %}</option>{% endfor %}
+  {% if p.model and p.model not in p.models|map(attribute="id") %}<option value="{{ p.model }}" selected>{{ p.model }} {% if p.match %}(matches {{ p.match }}){% else %}(not found){% endif %}</option>{% endif %}
+</select>
+{%- else -%}
+<input name="model" value="{{ p.model }}" placeholder="first listed">
+{%- endif -%}
+</div>

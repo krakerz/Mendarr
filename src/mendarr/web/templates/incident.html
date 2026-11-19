@@ -7,6 +7,7 @@
   <span>/</span>
   <span>#{{ inc.id }}</span>
 </div>
+<div id="incident-live" data-stamp="{{ stamp }}">
 <header class="page-head">
   <div>
     <h1><span>#{{ inc.id }}</span> <span>{{ inc.domain }}</span> {{ m.badge(inc.state) }}</h1>
@@ -46,22 +47,19 @@
     <dt>Closed</dt><dd>{% if inc.closed %}{{ inc.closed|ts }}{% else %}<span class="muted">—</span>{% endif %}</dd>
     <dt>Next attempt</dt><dd>{{ inc.next_attempt_at|ago }}</dd>
     <dt>Reason</dt><dd>{{ inc.reason or "—" }}</dd>
+    <dt>Now</dt><dd>{% if activity %}<span class="live-dot" aria-hidden="true"></span>{{ activity.description }} <span class="muted">({{ activity.elapsed_s }}s)</span>{% else %}<span class="muted">idle</span>{% endif %}</dd>
     <dt>Note</dt><dd>{{ inc.note or "—" }}</dd>
+    <dt>Backend</dt><dd>{% if backend.name %}<span class="badge mono">{{ backend.name }}</span>{% if backend.note %} <span class="muted">({{ backend.note }})</span>{% endif %}{% else %}<span class="muted">—</span>{% endif %}</dd>
     <dt>Plugin</dt><dd>{% if plugin_scope %}<a class="mono" href="/ui/plugins/{{ plugin_scope|urlencode }}">{{ inc.plugin }}</a>{% else %}<code>{{ inc.plugin }}</code>{% endif %}</dd>
   </dl>
 </div>
 
 <section class="section">
-  <div class="section-head"><h2>Failure trace</h2></div>
-  {% if trace %}{% include "_trace.html" %}{% else %}{{ m.empty("No trace saved.", "image") }}{% endif %}
-</section>
-
-<section class="section">
   <div class="section-head"><h2>Heal attempts</h2></div>
   {% for a in attempts %}
-  <details class="round"{% if a.prompt_ref or a.response_ref %} hx-get="/ui/incidents/{{ inc.id }}/attempts/{{ a.id }}/transcript" hx-trigger="toggle once" hx-target="find .transcript" hx-swap="innerHTML"{% endif %}>
+  <details class="round" data-attempt="{{ a.id }}"{% if a.prompt_ref or a.response_ref %} hx-get="/ui/incidents/{{ inc.id }}/attempts/{{ a.id }}/transcript" hx-trigger="toggle once" hx-target="find .transcript" hx-swap="innerHTML"{% endif %}>
     <summary>
-      <span>#{{ loop.revindex }} · tier {{ a.tier }}{% if a.tier == 1 %} · window {{ a.heal_window + 1 }} round {{ a.round + 1 }} · {{ a.profile }} ({{ a.model }}){% endif %}</span>
+      <span>#{{ loop.revindex }} · tier {{ a.tier }}{% if a.backend %} · <span class="mono">{{ a.backend }}</span>{% endif %}{% if a.tier == 1 %} · window {{ a.heal_window + 1 }} round {{ a.round + 1 }} · {{ a.profile }} ({{ a.model }}){% endif %}</span>
       <span class="muted" style="margin-left: 8px;">{{ "%.1f"|format(a.elapsed_s) }}s · {{ a.at|ago }}</span>
       {{ m.badge(a.result) }}
     </summary>
@@ -74,4 +72,36 @@
   {{ m.empty("No heal attempts yet.", "refresh-cw") }}
   {% endfor %}
 </section>
+</div>
+
+<section class="section">
+  <div class="section-head"><h2>Failure trace</h2></div>
+  {% if trace %}{% include "_trace.html" %}{% else %}{{ m.empty("No trace saved.", "image") }}{% endif %}
+</section>
+<script>
+(function () {
+  // Poll a tiny stamp; re-render the live part only when it changed, keeping opened attempts open.
+  var url = location.pathname;
+  function live() { return document.getElementById("incident-live"); }
+  function tick() {
+    if (document.hidden || !live()) return;
+    fetch(url + "/stamp", { credentials: "same-origin", cache: "no-store" })
+      .then(function (r) { return r.ok ? r.text() : null; })
+      .then(function (s) {
+        var el = live();
+        if (s === null || !el || s === el.dataset.stamp) return;
+        var open = Array.prototype.map.call(el.querySelectorAll("details.round[open]"), function (d) { return d.dataset.attempt; });
+        htmx.ajax("GET", url, { target: "#incident-live", select: "#incident-live", swap: "outerHTML" }).then(function () {
+          open.forEach(function (id) {
+            var d = document.querySelector('#incident-live details.round[data-attempt="' + id + '"]');
+            if (d) d.open = true;
+          });
+        });
+      })
+      .catch(function () {});
+  }
+  setInterval(tick, 4000);
+  document.addEventListener("visibilitychange", tick);
+})();
+</script>
 {% endblock %}

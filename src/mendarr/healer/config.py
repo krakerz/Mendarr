@@ -5,7 +5,7 @@ import os
 import re
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 import yaml
 from pydantic import (
@@ -66,6 +66,7 @@ class LlmProfile(_Model):
     max_tokens: int = 8192
     timeout_s: Duration = 600
     dom_chars: int = 24_000  # trimmed DOM budget in the prompt
+    extra_body: dict[str, Any] = {}  # merged into every chat request, e.g. {chat_template_kwargs: {enable_thinking: false}}
 
 
 class ManualPolicy(_Model):

@@ -86,6 +86,7 @@ class SolveResult(BaseModel):
     clicks: int = 0
     plugin: str = "_default@builtin"
     user_agent: str = ""
+    backend: str = ""  # browser backend that ran ("" = unknown, e.g. an older worker)
     egress: str = "default"
     snapshot: Snapshot | None = None
     screenshot_b64: str | None = None
@@ -197,6 +198,7 @@ class BackendStatus(BaseModel):
     installed: str = ""  # version in use; "" = unknown
     source: Literal["built-in", "updated"] = "built-in"
     latest: str = ""  # from the last check; "" = not checked
+    latest_via: str = ""  # where `latest` came from when not the official releases, e.g. "mirror"
     checked_at: float = 0.0
     state: Literal["idle", "checking", "updating", "pending_restart", "failed"] = "idle"
     error: str = ""

@@ -6,7 +6,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="csrf-token" content="{{ request.state.csrf|default('') }}">
   <title>{% block title %}Mendarr{% endblock %} · Mendarr</title>
-  <link rel="icon" href="/ui/static/favicon.svg" type="image/svg+xml">
+  <link rel="icon" href="/ui/static/favicon.svg?v={{ asset_v }}" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/ui/static/apple-touch-icon.png?v={{ asset_v }}">
   <link rel="stylesheet" href="/ui/static/app.css?v={{ asset_v }}">
   <script src="/ui/static/vendor/htmx/htmx.min.js?v={{ asset_v }}" defer></script>
   {% block head %}{% endblock %}
@@ -21,7 +22,7 @@
 {% if user %}
 <div class="shell">
   <aside class="sidebar">
-    <a class="brand" href="/ui"><span class="brand-mark">{{ m.icon("shield-check") }}</span><span>Mendarr</span></a>
+    <a class="brand" href="/ui"><span class="brand-mark"><img class="mark" src="/ui/static/mark.svg?v={{ asset_v }}" alt=""></span><span>Mendarr</span></a>
     <div class="nav-label">Monitor</div>
     {% for key, href, ic, label in [
         ("overview", "/ui", "layout-dashboard", "Overview"),
