@@ -183,6 +183,10 @@ class UpdatesConfig(_Model):
     interval: Duration | None = None  # None = MENDARR_UPDATE_CHECK_INTERVAL
 
 
+class UiConfig(_Model):
+    hide_unused_days: int = Field(3, ge=0, le=365)  # Overview hides domains with no request for this long; 0 = never
+
+
 class HealerConfig(_Model):
     healer: HealerTuning = HealerTuning()
     escalation: Escalation = Escalation()
@@ -191,6 +195,7 @@ class HealerConfig(_Model):
     cookies: CookieConfig = CookieConfig()
     solver: SolverConfig = SolverConfig()
     updates: UpdatesConfig = UpdatesConfig()
+    ui: UiConfig = UiConfig()
     domains: dict[str, DomainOverride] = {}
 
     def for_domain(self, domain: str) -> DomainPolicy:

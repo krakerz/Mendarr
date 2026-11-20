@@ -55,6 +55,9 @@ llm:
   # refresh_idle_days: 7      # skip domains nobody asked for in this many days
   # refresh_timeout: 60s      # budget of one background re-solve (minimum 10s)
 
+# ui:                         # optional; also on the Settings page (Dashboard card)
+  # hide_unused_days: 3       # Overview hides domains with no request for this many days (0 = show all, max 365); nothing is deleted
+
 # updates:                    # optional
   # check: true               # look for a new Mendarr release; overrides MENDARR_UPDATE_CHECK
   # interval: 24h             # minimum 1h

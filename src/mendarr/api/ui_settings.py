@@ -183,6 +183,7 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
     cookies_raw = raw.get("cookies") if isinstance(raw.get("cookies"), dict) else {}
     solver_raw = raw.get("solver") if isinstance(raw.get("solver"), dict) else {}
     updates_raw = raw.get("updates") if isinstance(raw.get("updates"), dict) else {}
+    ui_raw = raw.get("ui") if isinstance(raw.get("ui"), dict) else {}
     upd_enabled, upd_interval, _ = update_policy(st, cfg)
     windows = esc_raw.get("heal_windows")
     if not isinstance(windows, list):
@@ -228,6 +229,7 @@ def _context(request: Request, text: str | None = None, **extra: object) -> dict
             "env_backend": st.default_backend,
             "locale": solver_raw.get("locale", ""),
         },
+        "ui": {"hide_unused_days": ui_raw.get("hide_unused_days", ""), "default": cfg.ui.hide_unused_days},
         "updates": {
             "enabled": upd_enabled,
             "interval": updates_raw.get("interval", _fmt_dur(upd_interval)),
@@ -458,6 +460,23 @@ async def solver_save(request: Request) -> Response:
             sec["locale"] = locale
 
     return await _edit(request, mutate, "Saved the solver settings", "solver")
+
+
+@router.post("/settings/ui")
+async def ui_save(request: Request) -> Response:
+    def mutate(raw: dict, form) -> None:
+        sec = _section(raw, "ui")
+        if not str(form.get("hide_unused_days", "")).strip():
+            sec.pop("hide_unused_days", None)  # empty = the default; saving the form doesn't pin it
+            if not sec:
+                raw.pop("ui", None)  # don't leave an empty `ui: {}` behind in mendarr.yml
+            return
+        days = _int(form, "hide_unused_days", "Hide unused after")
+        if not 0 <= days <= 365:
+            raise _Bad("Hide unused after must be 0 to 365 days")
+        sec["hide_unused_days"] = days
+
+    return await _edit(request, mutate, "Saved the dashboard settings", "dashboard")
 
 
 @router.post("/settings/updates")
