@@ -180,6 +180,24 @@
     </form>
   </section>
 
+  <section id="dashboard" class="card">
+    <div class="card-head">
+      <h2>{{ m.icon("settings") }} Dashboard</h2>
+    </div>
+    <form method="post" action="/ui/settings/ui" class="form-grid">
+      {{ m.csrf_field() }}
+      <label>Hide unused after (days)</label>
+      <div>
+        <input type="number" name="hide_unused_days" min="0" max="365" value="{{ ui.hide_unused_days }}" placeholder="{{ ui.default }}">
+        <div class="hint">Hide domains on the Overview that had no requests for this many days. 0 shows all. Plugins, cookies and stats are kept.</div>
+      </div>
+      <span></span>
+      <div>
+        <button class="btn btn-primary">{{ m.icon("save") }} Save dashboard settings</button>
+      </div>
+    </form>
+  </section>
+
   <section id="solver" class="card">
     <div class="card-head">
       <h2>{{ m.icon("settings") }} Solver</h2>

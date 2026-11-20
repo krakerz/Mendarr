@@ -10,7 +10,7 @@
 </header>
 {# hx-disinherit: the inner pollers (/ui/active, /ui/egress) must not inherit hx-select="#overview", or their
    fragments select nothing and the In progress table vanishes on every 3 s poll #}
-<div id="overview" hx-get="/ui" hx-select="#overview" hx-swap="outerHTML" hx-trigger="every 15s" hx-disinherit="hx-select">
+<div id="overview" hx-get="/ui{{ '?all=1' if show_all else '' }}" hx-select="#overview" hx-swap="outerHTML" hx-trigger="every 15s" hx-disinherit="hx-select">
   <div class="stats">
     <div class="stat">
       <div class="stat-top"><span class="stat-label">In progress</span><span class="stat-icon {{ 'accent' if active_items else '' }}">{{ m.icon("refresh-cw", "spin" if active_items else "") }}</span></div>
@@ -24,8 +24,8 @@
     </a>
     <a class="stat" href="/ui/cookies">
       <div class="stat-top"><span class="stat-label">Domains & Cache</span><span class="stat-icon accent">{{ m.icon("cookie") }}</span></div>
-      <div class="stat-value">{{ rows|length }} <span class="muted" style="font-size: 1.05rem; font-weight: 500;">/ {{ cookies }}</span></div>
-      <div class="stat-sub">{{ rows|length }} domains · {{ cookies }} cached</div>
+      <div class="stat-value">{{ domain_total }} <span class="muted" style="font-size: 1.05rem; font-weight: 500;">/ {{ cookies }}</span></div>
+      <div class="stat-sub">{{ domain_total }} domains · {{ cookies }} cached</div>
     </a>
     <div class="stat">
       <div class="stat-top"><span class="stat-label">Healer</span><span class="stat-icon {{ 'green' if healer_on else '' }}">{{ m.icon("refresh-cw") }}</span></div>
@@ -60,8 +60,13 @@
         </tbody>
       </table>
     </div>
-    {% else %}
+    {% elif not domain_total %}
     {{ m.empty("No traffic yet.", "network") }}
+    {% endif %}
+    {% if show_all and hide_days %}
+    <p class="muted" style="margin-top: 10px; font-size: 0.8125rem;">Showing all domains · <a href="/ui">Hide unused</a></p>
+    {% elif hidden %}
+    <p class="muted" style="margin-top: 10px; font-size: 0.8125rem;">{{ hidden }} domain{{ "" if hidden == 1 else "s" }} unused for {{ hide_days }}+ days {{ "is" if hidden == 1 else "are" }} hidden · <a href="/ui?all=1">Show all</a></p>
     {% endif %}
   </section>
   <section class="section">

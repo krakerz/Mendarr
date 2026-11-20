@@ -71,9 +71,11 @@ def logout() -> Response:
 
 
 @router.get("", dependencies=AUTH)
-def overview(request: Request) -> Response:
+def overview(request: Request, all_: bool = Query(False, alias="all")) -> Response:
     st = request.app.state
     now = time.time()
+    cfg = st.config_file.get()
+    hide_days = cfg.ui.hide_unused_days
     day, week = st.stats.summary(now - 86400), st.stats.summary(now - 7 * 86400)
     cookies = st.cache.entries()
     incidents = [i for i in st.store.incidents() if i["state"] in OPEN_INCIDENTS]
@@ -81,7 +83,8 @@ def overview(request: Request) -> Response:
     last = st.stats.last()
     mismatch = st.stats.counters(CHECK_MISMATCH)
     # domains that never showed a challenge have no solve stats; the last-outcome table keeps them listed
-    quiet = {d for d, (outcome, at) in last.items() if outcome == "no_challenge" and at >= now - 7 * 86400}
+    quiet_s = max(7, hide_days) * 86400
+    quiet = {d for d, (outcome, at) in last.items() if outcome == "no_challenge" and at >= now - quiet_s}
     domains = sorted(set(week) | {c.domain for c in cookies} | scopes | {i["domain"] for i in incidents} | quiet)
     rows = []
     for d in domains:
@@ -98,15 +101,30 @@ def overview(request: Request) -> Response:
                 "incidents": [i for i in incidents if i["domain"] == d],
                 "last": last.get(d),
                 "mismatch": mismatch.get(d, 0),
+                # any request counts: a solve, the last outcome (no_challenge, cache-served) or a cookie cache touch
+                "used_at": max(
+                    week[d].last_at if d in week else 0.0,
+                    last[d][1] if d in last else 0.0,
+                    max((c.last_used for c in cookies if c.domain == d), default=0.0),
+                ),
             }
         )
-    cfg = st.config_file.get()
+    domain_total = len(rows)
+    hidden = 0
+    if hide_days and not all_:
+        cutoff = now - hide_days * 86400
+        kept = [r for r in rows if r["incidents"] or r["used_at"] >= cutoff]
+        hidden, rows = domain_total - len(kept), kept
     active_items = st.tracker.items() if hasattr(st, "tracker") and st.tracker else []
     return render(
         request,
         "overview.html",
         active="overview",
         rows=rows,
+        domain_total=domain_total,
+        hidden=hidden,
+        show_all=all_,
+        hide_days=hide_days,
         incidents=incidents[:10],
         cookies=len(cookies),
         healer_on=st.settings.healer_enabled and cfg.healer.enabled,

@@ -5,6 +5,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-11-20
+
+### Added
+- The Overview hides domains with no requests for 3 days (Settings → Dashboard, `ui.hide_unused_days`; 0 turns it off). "Show all" brings them back; domains with open incidents always show. Nothing is deleted.
+
 ## [1.2.0] — 2026-11-19
 
 ### Added
